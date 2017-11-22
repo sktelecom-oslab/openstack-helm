@@ -16,23 +16,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-set -ex
-
-extra_services="{{- .Values.conf.neutron.DEFAULT.service_plugins -}}"
-function sync_extra_services() {
-  if [[ "${extra_services}" =~ "lbaasv2" ]]; then
-    neutron-db-manage --subproject neutron-lbaas \
-    --config-file /etc/neutron/neutron.conf \
-    --config-file /etc/neutron/neutron_lbaas.conf \
-    upgrade head
-  fi
-
-  # add more services here
-}
-
-neutron-db-manage \
-  --config-file /etc/neutron/neutron.conf \
-  --config-file /etc/neutron/plugins/ml2/ml2_conf.ini \
-  upgrade head
-
-sync_extra_services
+set -x
+exec neutron-lbaasv2-agent \
+      --config-file /etc/neutron/neutron.conf \
+      --config-file /etc/neutron/plugins/ml2/ml2_conf.ini \
+{{- if eq .Values.network.backend "ovs" }}
+      --config-file /etc/neutron/plugins/ml2/openvswitch_agent.ini \
+{{- end }}
+      --config-file /etc/neutron/neutron_lbaas.conf \
+      --config-file=/etc/neutron/services/loadbalancer/haproxy/lbaas_agent.ini

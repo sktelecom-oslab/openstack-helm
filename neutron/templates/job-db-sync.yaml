@@ -64,6 +64,10 @@ spec:
               mountPath: /etc/neutron/plugins/ml2/ml2_conf.ini
               subPath: ml2_conf.ini
               readOnly: true
+            - name: neutron-etc
+              mountPath: /etc/neutron/neutron_lbaas.conf
+              subPath: neutron_lbaas.conf
+              readOnly: true
       volumes:
         - name: etcneutron
           emptyDir: {}

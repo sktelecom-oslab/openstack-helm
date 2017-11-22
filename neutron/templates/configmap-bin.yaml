@@ -63,4 +63,6 @@ data:
 {{ tuple "bin/_neutron-openvswitch-agent-init-modules.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   neutron-server.sh: |+
 {{ tuple "bin/_neutron-server.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  neutron-lbaas-agent.sh: |+
+{{ tuple "bin/_neutron-lbaas-agent.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
 {{- end }}

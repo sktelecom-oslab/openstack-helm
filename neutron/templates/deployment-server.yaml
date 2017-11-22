@@ -84,6 +84,10 @@ spec:
               mountPath: /etc/neutron/policy.json
               subPath: policy.json
               readOnly: true
+            - name: neutron-etc
+              mountPath: /etc/neutron/neutron_lbaas.conf
+              subPath: neutron_lbaas.conf
+              readOnly: true
 {{ if $mounts_neutron_server.volumeMounts }}{{ toYaml $mounts_neutron_server.volumeMounts | indent 12 }}{{ end }}
       volumes:
         - name: neutron-bin

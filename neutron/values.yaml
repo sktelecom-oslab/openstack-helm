@@ -35,6 +35,7 @@ images:
     neutron_l3: docker.io/kolla/ubuntu-source-neutron-l3-agent:3.0.3
     neutron_openvswitch_agent: docker.io/kolla/ubuntu-source-neutron-openvswitch-agent:3.0.3
     neutron_linuxbridge_agent: docker.io/kolla/ubuntu-source-neutron-linuxbridge-agent:3.0.3
+    neutron_lbaas_agent: docker.io/kolla/ubuntu-source-neutron-lbaas-agent:3.0.3
     dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
   pull_policy: "IfNotPresent"
 
@@ -57,6 +58,9 @@ labels:
       node_selector_key: openstack-control-plane
       node_selector_value: enabled
     metadata:
+      node_selector_key: openstack-control-plane
+      node_selector_value: enabled
+    lbaas:
       node_selector_key: openstack-control-plane
       node_selector_value: enabled
   server:
@@ -196,6 +200,15 @@ dependencies:
     daemonset:
     # this should be set to corresponding neutron L2 agent
     - neutron-ovs-agent
+  lbaas_agent:
+    services:
+    - service: oslo_messaging
+      endpoint: internal
+    - service: network
+      endpoint: internal
+    daemonset:
+    # this should be set to corresponding neutron L2 agent
+    - neutron-ovs-agent
   tests:
     services:
     - service: network
@@ -238,6 +251,9 @@ pod:
     neutron_ovs_agent:
       init_container: null
       neutron_ovs_agent:
+    neutron_lbaas_agent:
+      init_container: null
+      neutron_lbaas_agent:
     neutron_tests:
       init_container: null
       neutron_tests:
@@ -273,6 +289,10 @@ pod:
           min_ready_seconds: 0
           max_unavailable: 1
         ovs_agent:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+        lbaas_agent:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1
@@ -314,6 +334,13 @@ pod:
           memory: "1024Mi"
           cpu: "2000m"
       ovs:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      lbaas:
         requests:
           memory: "128Mi"
           cpu: "100m"
@@ -944,6 +971,9 @@ conf:
     openvswitch_plugin:
       override:
       append:
+    lbaas-haproxy:
+      override:
+      append:
   neutron:
     DEFAULT:
       default_availability_zones: nova
@@ -951,7 +981,7 @@ conf:
       allow_overlapping_ips: True
       # core_plugin can be: ml2, calico
       core_plugin: ml2
-      # service_plugin can be: router, odl-router, empty for calico,
+      # service_plugin can be: router, lbaasv2, odl-router, empty for calico,
       # networking_ovn.l3.l3_ovn.OVNL3RouterPlugin for OVN
       service_plugins: router
       metadata_proxy_socket: /var/lib/neutron/openstack-helm/metadata_proxy
@@ -1052,6 +1082,15 @@ conf:
     cache:
       enabled: true
       backend: dogpile.cache.memcached
+  services:
+    loadbalancer:
+      service_providers:
+        service_provider: LOADBALANCERV2:Haproxy:neutron_lbaas.drivers.haproxy.plugin_driver.HaproxyOnHostPluginDriver:default
+  lbaas_agent:
+    DEFAULT:
+      # openvswitch or linuxbridge
+      interface_driver: openvswitch
+      ovs_use_veth: False
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
@@ -1204,6 +1243,7 @@ manifests:
   daemonset_lb_agent: false
   daemonset_metadata_agent: true
   daemonset_ovs_agent: true
+  daemonset_lbaas_agent: false
   deployment_server: true
   ingress_server: true
   job_bootstrap: true

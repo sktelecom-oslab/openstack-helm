@@ -122,6 +122,10 @@ data:
 {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.plugins.openvswitch_agent | indent 4 }}
   sriov_agent.ini: |+
 {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.plugins.sriov_agent | indent 4 }}
+  neutron_lbaas.conf: |+
+{{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.services.loadbalancer | indent 4 }}
+  lbaas_agent.ini: |+
+{{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.lbaas_agent | indent 4 }}
   dnsmasq.conf: ""
   neutron_sudoers: |+
 {{- tuple .Values.conf.neutron_sudoers "etc/_neutron_sudoers.tpl" . | include "helm-toolkit.utils.configmap_templater" }}
@@ -147,4 +151,6 @@ data:
 {{- tuple .Values.conf.rootwrap_filters.linuxbridge_plugin "etc/rootwrap.d/_linuxbridge-plugin.filters.tpl" . | include "helm-toolkit.utils.configmap_templater" }}
   openvswitch-plugin.filters: |+
 {{- tuple .Values.conf.rootwrap_filters.openvswitch_plugin "etc/rootwrap.d/_openvswitch-plugin.filters.tpl" . | include "helm-toolkit.utils.configmap_templater" }}
+  lbaas-haproxy.filters: |+
+{{- tuple .Values.conf.rootwrap_filters.openvswitch_plugin "etc/rootwrap.d/_lbaas-haproxy.filters.tpl" . | include "helm-toolkit.utils.configmap_templater" }}
 {{- end }}
