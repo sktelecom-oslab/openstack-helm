@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if .Values.manifests.configmap_bin }}
+{{- if and .Values.manifests.configmap_bin .Values.deployment.ceph }}
 {{- $envAll := . }}
-{{- if .Values.deployment.ceph }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -24,52 +23,69 @@ metadata:
   name: ceph-bin
 data:
 {{- if .Values.bootstrap.enabled }}
-  bootstrap.sh: |+
+  bootstrap.sh: |
 {{ tuple "bin/_bootstrap.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
 {{- end }}
-  ceph-key.py: |+
-{{ tuple "bin/_ceph-key.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  ceph-key.sh: |+
-{{ tuple "bin/_ceph-key.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  ceph-storage-key.sh: |+
-{{ tuple "bin/_ceph-storage-key.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  init_dirs.sh: |+
-{{ tuple "bin/_init_dirs.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  common_functions.sh: |+
-{{ tuple "bin/_common_functions.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  osd_activate_journal.sh: |+
-{{ tuple "bin/_osd_activate_journal.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  osd_common.sh: |+
-{{ tuple "bin/_osd_common.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  osd_directory.sh: |+
-{{ tuple "bin/_osd_directory.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  osd_directory_single.sh: |+
-{{ tuple "bin/_osd_directory_single.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  osd_disk_activate.sh: |+
-{{ tuple "bin/_osd_disk_activate.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  osd_disk_prepare.sh: |+
-{{ tuple "bin/_osd_disk_prepare.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  osd_disks.sh: |+
-{{ tuple "bin/_osd_disks.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  remove-mon.sh: |+
-{{ tuple "bin/_remove-mon.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  start_mon.sh: |+
-{{ tuple "bin/_start_mon.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  start_osd.sh: |+
-{{ tuple "bin/_start_osd.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  start_mds.sh: |+
-{{ tuple "bin/_start_mds.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  start_rgw.sh: |+
-{{ tuple "bin/_start_rgw.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  init_rgw_ks.sh: |+
-{{ tuple "bin/_init_rgw_ks.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  watch_mon_health.sh: |+
-{{ tuple "bin/_watch_mon_health.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  variables_entrypoint.sh: |
-{{ tuple "bin/_variables_entrypoint.sh.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
-  check_zombie_mons.py: |
-{{ tuple "bin/_check_zombie_mons.py.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
-  rbd-provisioner.sh: |
-{{ tuple "bin/_rbd-provisioner.sh.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
-{{- end }}
+
+  init-dirs.sh: |
+{{ tuple "bin/_init-dirs.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+
+  pool-init.sh: |
+{{ tuple "bin/pool/_init.sh.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
+  pool-calc.py: |
+{{ tuple "bin/pool/_calc.py.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
+
+  keys-bootstrap-keyring-generator.py: |
+{{ tuple "bin/keys/_bootstrap-keyring-generator.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  keys-bootstrap-keyring-manager.sh: |
+{{ tuple "bin/keys/_bootstrap-keyring-manager.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  keys-storage-keyring-manager.sh: |
+{{ tuple "bin/keys/_storage-keyring-manager.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+
+  mds-start.sh: |
+{{ tuple "bin/mds/_start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+
+  mgr-start.sh: |
+{{ tuple "bin/mgr/_start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  mgr-check.sh: |
+{{ tuple "bin/mgr/_check.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+
+  mon-start.sh: |
+{{ tuple "bin/mon/_start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  mon-stop.sh: |
+{{ tuple "bin/mon/_stop.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  mon-check.sh: |
+{{ tuple "bin/mon/_check.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+
+  moncheck-start.sh: |
+{{ tuple "bin/moncheck/_start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  moncheck-reap-zombies.py: |
+{{ tuple "bin/moncheck/_reap-zombies.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+
+  osd-start.sh: |
+{{ tuple "bin/osd/_start.sh.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
+  osd-directory.sh: |
+{{ tuple "bin/osd/_directory.sh.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
+  osd-block.sh: |
+{{ tuple "bin/osd/_block.sh.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
+  osd-init.sh: |
+{{ tuple "bin/osd/_init.sh.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
+  osd-check.sh: |
+{{ tuple "bin/osd/_check.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  osd-stop.sh: |
+{{ tuple "bin/osd/_stop.sh.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
+
+  provisioner-cephfs-start.sh: |
+{{ tuple "bin/provisioner/cephfs/_start.sh.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
+  provisioner-cephfs-client-key-manager.sh: |
+{{ tuple "bin/provisioner/cephfs/_client-key-manager.sh.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
+
+  provisioner-rbd-start.sh: |
+{{ tuple "bin/provisioner/rbd/_start.sh.tpl" . | include  "helm-toolkit.utils.template" | indent 4 }}
+
+  rgw-start.sh: |
+{{ tuple "bin/rgw/_start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  rgw-init-keystone.sh: |
+{{ tuple "bin/rgw/_init_keystone.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+
 {{- end }}

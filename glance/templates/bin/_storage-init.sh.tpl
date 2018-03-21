@@ -33,8 +33,12 @@ elif [ "x$STORAGE_BACKEND" == "xrbd" ]; then
   ceph -s
   function ensure_pool () {
     ceph osd pool stats $1 || ceph osd pool create $1 $2
+    local test_luminous=$(ceph tell osd.* version | egrep -c "12.2|luminous")
+    if [[ ${test_luminous} -gt 0 ]]; then
+      ceph osd pool application enable $1 $3
+    fi
   }
-  ensure_pool ${RBD_POOL_NAME} ${RBD_POOL_CHUNK_SIZE}
+  ensure_pool ${RBD_POOL_NAME} ${RBD_POOL_CHUNK_SIZE} "glance-image"
 
   if USERINFO=$(ceph auth get client.${RBD_POOL_USER}); then
     KEYSTR=$(echo $USERINFO | sed 's/.*\( key = .*\) caps mon.*/\1/')
@@ -44,6 +48,7 @@ elif [ "x$STORAGE_BACKEND" == "xrbd" ]; then
     ceph auth get-or-create client.${RBD_POOL_USER} \
       mon "allow *" \
       osd "allow *" \
+      mgr "allow *" \
       -o ${KEYRING}
   fi
 

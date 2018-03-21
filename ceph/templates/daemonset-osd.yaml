@@ -14,10 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if .Values.manifests.daemonset_osd }}
-{{- $envAll := . }}
-{{- if .Values.deployment.ceph }}
-{{- $dependencies := .Values.dependencies.osd }}
+
+{{- define "ceph.osd.daemonset" }}
+{{- $daemonset := index . 0 }}
+{{- $configMapName := index . 1 }}
+{{- $serviceAccountName := index . 2 }}
+{{- $dependencies := index . 3 }}
+{{- $envAll := index . 4 }}
+{{- with $envAll }}
 ---
 kind: DaemonSet
 apiVersion: extensions/v1beta1
@@ -29,31 +33,96 @@ spec:
       labels:
 {{ tuple $envAll "ceph" "osd" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       nodeSelector:
         {{ .Values.labels.osd.node_selector_key }}: {{ .Values.labels.osd.node_selector_value }}
       hostNetwork: true
+      hostPID: true
       dnsPolicy: {{ .Values.pod.dns_policy }}
       initContainers:
-{{ tuple $envAll $dependencies "" | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         - name: ceph-init-dirs
           image: {{ .Values.images.tags.ceph_daemon }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
           command:
-            - /tmp/init_dirs.sh
+            - /tmp/init-dirs.sh
+          env:
+          # NOTE(portdirect): These environment variables will be populated
+          # dynamicly at the point of render.
+          # - name: JOURNAL_LOCATION
+          #   value: /var/lib/openstack-helm/ceph/osd/journal-one
+          # - name: STORAGE_LOCATION
+          #   value: /var/lib/openstack-helm/ceph/osd/data-one
+          # - name: JOURNAL_TYPE
+          #   value: directory
+          # - name: STORAGE_TYPE
+          #   value: directory
+            - name: CLUSTER
+              value: "ceph"
           volumeMounts:
             - name: ceph-bin
-              mountPath: /tmp/init_dirs.sh
-              subPath: init_dirs.sh
-              readOnly: true
-            - name: ceph-bin
-              mountPath: /variables_entrypoint.sh
-              subPath: variables_entrypoint.sh
+              mountPath: /tmp/init-dirs.sh
+              subPath: init-dirs.sh
               readOnly: true
             - name: pod-var-lib-ceph
               mountPath: /var/lib/ceph
               readOnly: false
             - name: pod-run
               mountPath: /run
+              readOnly: false
+        - name: osd-init
+          image: {{ .Values.images.tags.ceph_daemon }}
+          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll $envAll.Values.pod.resources.osd | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+          securityContext:
+            privileged: true
+          env:
+          # NOTE(portdirect): These environment variables will be populated
+          # dynamicly at the point of render.
+          # - name: JOURNAL_LOCATION
+          #   value: /var/lib/openstack-helm/ceph/osd/journal-one
+          # - name: STORAGE_LOCATION
+          #   value: /var/lib/openstack-helm/ceph/osd/data-one
+          # - name: JOURNAL_TYPE
+          #   value: directory
+          # - name: STORAGE_TYPE
+          #   value: directory
+            - name: CLUSTER
+              value: "ceph"
+            - name: CEPH_GET_ADMIN_KEY
+              value: "1"
+          command:
+            - /tmp/osd-init.sh
+          volumeMounts:
+            - name: ceph-bin
+              mountPath: /tmp/osd-init.sh
+              subPath: osd-init.sh
+              readOnly: true
+            - name: ceph-etc
+              mountPath: /etc/ceph/ceph.conf
+              subPath: ceph.conf
+              readOnly: true
+            - name: ceph-bootstrap-osd-keyring
+              mountPath: /var/lib/ceph/bootstrap-osd/ceph.keyring
+              subPath: ceph.keyring
+              readOnly: false
+            - name: devices
+              mountPath: /dev
+              readOnly: false
+            - name: pod-var-lib-ceph
+              mountPath: /var/lib/ceph
+              readOnly: false
+            - name: pod-run
+              mountPath: /run
+              readOnly: false
+            - name: run-lvm
+              mountPath: /run/lvm
+              readOnly: false
+            - name: data
+              mountPath: /var/lib/ceph/osd
+              readOnly: false
+            - name: journal
+              mountPath: /var/lib/ceph/journal
               readOnly: false
       containers:
         - name: osd-pod
@@ -63,65 +132,72 @@ spec:
           securityContext:
             privileged: true
           env:
-            - name: CEPH_DAEMON
-              value: osd_directory
+          # NOTE(portdirect): These environment variables will be populated
+          # dynamicly at the point of render.
+          # - name: JOURNAL_LOCATION
+          #   value: /var/lib/openstack-helm/ceph/osd/journal-one
+          # - name: STORAGE_LOCATION
+          #   value: /var/lib/openstack-helm/ceph/osd/data-one
+          # - name: JOURNAL_TYPE
+          #   value: directory
+          # - name: STORAGE_TYPE
+          #   value: directory
+            - name: CLUSTER
+              value: "ceph"
             - name: CEPH_GET_ADMIN_KEY
               value: "1"
           command:
-            - /start_osd.sh
-          ports:
-            - containerPort: 6800
+            - /tmp/osd-start.sh
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /tmp/osd-stop.sh
           livenessProbe:
-              tcpSocket:
-                port: 6800
-              initialDelaySeconds: 60
-              timeoutSeconds: 5
+           exec:
+            command:
+             - /tmp/osd-check.sh
+             - liveness
+           initialDelaySeconds: 120
+           periodSeconds: 60
           readinessProbe:
-              tcpSocket:
-                port: 6800
-              timeoutSeconds: 5
+           exec:
+            command:
+             - /tmp/osd-check.sh
+             - readiness
+           initialDelaySeconds: 60
+           periodSeconds: 60
           volumeMounts:
-            - name: devices
-              mountPath: /dev
-              readOnly: false
             - name: ceph-bin
-              mountPath: /start_osd.sh
-              subPath: start_osd.sh
+              mountPath: /tmp/osd-start.sh
+              subPath: osd-start.sh
               readOnly: true
             - name: ceph-bin
-              mountPath: /osd_directory.sh
-              subPath: osd_directory.sh
+              mountPath: /tmp/osd-directory.sh
+              subPath: osd-directory.sh
               readOnly: true
             - name: ceph-bin
-              mountPath: /common_functions.sh
-              subPath: common_functions.sh
+              mountPath: /tmp/osd-block.sh
+              subPath: osd-block.sh
+              readOnly: true
+            - name: ceph-bin
+              mountPath: /tmp/osd-check.sh
+              subPath: osd-check.sh
+              readOnly: true
+            - name: ceph-bin
+              mountPath: /tmp/osd-stop.sh
+              subPath: osd-stop.sh
               readOnly: true
             - name: ceph-etc
               mountPath: /etc/ceph/ceph.conf
               subPath: ceph.conf
               readOnly: true
-            - name: ceph-client-admin-keyring
-              mountPath: /etc/ceph/ceph.client.admin.keyring
-              subPath: ceph.client.admin.keyring
-              readOnly: false
-            - name: ceph-mon-keyring
-              mountPath: /etc/ceph/ceph.mon.keyring
-              subPath: ceph.mon.keyring
-              readOnly: false
             - name: ceph-bootstrap-osd-keyring
               mountPath: /var/lib/ceph/bootstrap-osd/ceph.keyring
               subPath: ceph.keyring
               readOnly: false
-            - name: ceph-bootstrap-mds-keyring
-              mountPath: /var/lib/ceph/bootstrap-mds/ceph.keyring
-              subPath: ceph.keyring
-              readOnly: false
-            - name: ceph-bootstrap-rgw-keyring
-              mountPath: /var/lib/ceph/bootstrap-rgw/ceph.keyring
-              subPath: ceph.keyring
-              readOnly: false
-            - name: osd-directory
-              mountPath: /var/lib/ceph/osd
+            - name: devices
+              mountPath: /dev
               readOnly: false
             - name: pod-var-lib-ceph
               mountPath: /var/lib/ceph
@@ -129,43 +205,57 @@ spec:
             - name: pod-run
               mountPath: /run
               readOnly: false
+            - name: run-lvm
+              mountPath: /run/lvm
+              readOnly: false
+            - name: data
+              mountPath: /var/lib/ceph/osd
+              readOnly: false
+            - name: journal
+              mountPath: /var/lib/ceph/journal
+              readOnly: false
       volumes:
         - name: devices
           hostPath:
             path: /dev
+        - name: run-lvm
+          hostPath:
+            path: /run/lvm
         - name: pod-var-lib-ceph
           emptyDir: {}
         - name: pod-run
           emptyDir:
             medium: "Memory"
-        - name: ceph
-          hostPath:
-            path: {{ .Values.ceph.storage.var_directory }}
         - name: ceph-bin
           configMap:
             name: ceph-bin
             defaultMode: 0555
         - name: ceph-etc
           configMap:
-            name: ceph-etc
+            name: {{ $configMapName }}
             defaultMode: 0444
-        - name: ceph-client-admin-keyring
-          secret:
-            secretName: {{ .Values.secrets.keyrings.admin }}
-        - name: ceph-mon-keyring
-          secret:
-            secretName: {{ .Values.secrets.keyrings.mon }}
         - name: ceph-bootstrap-osd-keyring
           secret:
             secretName: {{ .Values.secrets.keyrings.osd }}
-        - name: ceph-bootstrap-mds-keyring
-          secret:
-            secretName: {{ .Values.secrets.keyrings.mds }}
-        - name: ceph-bootstrap-rgw-keyring
-          secret:
-            secretName: {{ .Values.secrets.keyrings.rgw }}
-        - name: osd-directory
-          hostPath:
-            path: {{ .Values.ceph.storage.osd_directory }}
+      # NOTE(portdirect): If directory mounts are to be used for OSD's
+      # they will automaticly be inserted here, with the format:
+      # - name: data
+      #   hostPath:
+      #     path: /var/lib/foo
+      # - name: journal
+      #   hostPath:
+      #     path: /var/lib/bar
+
 {{- end }}
+{{- end }}
+
+{{- if and .Values.manifests.daemonset_osd .Values.deployment.ceph }}
+{{- $daemonset := "osd" }}
+{{- $configMapName := "ceph-etc" }}
+{{- $serviceAccountName := "ceph-osd"}}
+{{- $dependencies := .Values.dependencies.static.osd }}
+{{ tuple . $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- $daemonset_yaml := list $daemonset $configMapName $serviceAccountName $dependencies . | include "ceph.osd.daemonset" | toString | fromYaml }}
+{{- $configmap_yaml := "ceph.configmap.etc" }}
+{{- list $daemonset $daemonset_yaml $configmap_yaml $configMapName . | include "ceph.utils.osd_daemonset_overrides" }}
 {{- end }}

@@ -18,11 +18,11 @@ limitations under the License.
 {{- $envAll := . }}
 
 {{- if empty .Values.conf.keystone.database.connection -}}
-{{- tuple "oslo_db" "internal" "user" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup"| set .Values.conf.keystone.database "connection" | quote | trunc 0 -}}
+{{- tuple "oslo_db" "internal" "keystone" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup"| set .Values.conf.keystone.database "connection" | quote | trunc 0 -}}
 {{- end -}}
 
 {{- if empty .Values.conf.keystone.DEFAULT.transport_url -}}
-{{- tuple "oslo_messaging" "internal" "user" "amqp" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" | set .Values.conf.keystone.DEFAULT "transport_url" | quote | trunc 0 -}}
+{{- tuple "oslo_messaging" "internal" "keystone" "amqp" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" | set .Values.conf.keystone.DEFAULT "transport_url" | quote | trunc 0 -}}
 {{- end -}}
 
 {{- if empty .Values.conf.keystone.cache.memcache_servers -}}
@@ -35,18 +35,22 @@ kind: ConfigMap
 metadata:
   name: keystone-etc
 data:
-  rally_tests.yaml: |+
-{{- tuple .Values.conf.rally_tests "etc/_rally_tests.yaml.tpl" . | include "helm-toolkit.utils.configmap_templater" }}
-  keystone.conf: |+
+  rally_tests.yaml: |
+{{ toYaml .Values.conf.rally_tests.tests | indent 4 }}
+  keystone.conf: |
 {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.keystone | indent 4 }}
-  keystone-paste.ini: |+
+  keystone-paste.ini: |
 {{ include "helm-toolkit.utils.to_ini" .Values.conf.paste | indent 4 }}
-  policy.json: |+
+  policy.json: |
 {{  toJson .Values.conf.policy | indent 4 }}
-  mpm_event.conf: |+
+  mpm_event.conf: |
 {{- tuple .Values.conf.mpm_event "etc/_mpm_event.conf.tpl" . | include "helm-toolkit.utils.configmap_templater" }}
-  wsgi-keystone.conf: |+
+  wsgi-keystone.conf: |
 {{- tuple .Values.conf.wsgi_keystone "etc/_wsgi-keystone.conf.tpl" . | include "helm-toolkit.utils.configmap_templater" }}
-  sso_callback_template.html: |+
+  sso_callback_template.html: |
 {{- tuple .Values.conf.sso_callback_template "etc/_sso_callback_template.html.tpl" . | include "helm-toolkit.utils.configmap_templater" }}
+{{- range $k, $v := .Values.conf.ks_domains }}
+  keystone.{{ $k }}.conf: |
+{{ include "helm-toolkit.utils.to_oslo_conf" $v | indent 4 }}
+{{- end }}
 {{- end }}

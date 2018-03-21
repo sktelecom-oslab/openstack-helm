@@ -17,4 +17,5 @@ limitations under the License.
 */}}
 
 set -ex
+
 {{ .Values.bootstrap.script | default "echo 'Not Enabled'" }}

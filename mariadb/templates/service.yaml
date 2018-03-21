@@ -14,23 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
+{{- if .Values.manifests.service }}
 {{- $envAll := . }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ tuple "oslo_db" "internal" . | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" }}
-  annotations:
-    # This is needed to make the peer-finder work properly and to help avoid
-    # edge cases where instance 0 comes up after losing its data and needs to
-    # decide whether it should create a new cluster or try to join an existing
-    # one. If it creates a new cluster when it should have joined an existing
-    # one, we'd end up with two separate clusters listening at the same service
-    # endpoint, which would be very bad.
-    service.alpha.kubernetes.io/tolerate-unready-endpoints: "false"
 spec:
   ports:
     - name: db
       port: {{ tuple "oslo_db" "internal" "mysql" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
   selector:
 {{ tuple $envAll "mariadb" "server" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+{{- end }}

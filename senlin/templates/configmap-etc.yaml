@@ -26,40 +26,42 @@ limitations under the License.
 {{- tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set .Values.conf.senlin.keystone_authtoken "auth_url" | quote | trunc 0 -}}
 {{- end -}}
 
-# Set a random string as secret key.
-{{- if empty .Values.conf.senlin.keystone_authtoken.memcache_secret_key -}}
-{{- randAlphaNum 64 | set .Values.conf.senlin.keystone_authtoken "memcache_secret_key" | quote | trunc 0 -}}
-{{- end -}}
-
 {{- if empty .Values.conf.senlin.keystone_authtoken.region_name -}}
-{{- set .Values.conf.senlin.keystone_authtoken "region_name" .Values.endpoints.identity.auth.user.region_name | quote | trunc 0 -}}
+{{- set .Values.conf.senlin.keystone_authtoken "region_name" .Values.endpoints.identity.auth.senlin.region_name | quote | trunc 0 -}}
 {{- end -}}
 {{- if empty .Values.conf.senlin.keystone_authtoken.project_name -}}
-{{- set .Values.conf.senlin.keystone_authtoken "project_name" .Values.endpoints.identity.auth.user.project_name | quote | trunc 0 -}}
+{{- set .Values.conf.senlin.keystone_authtoken "project_name" .Values.endpoints.identity.auth.senlin.project_name | quote | trunc 0 -}}
 {{- end -}}
 {{- if empty .Values.conf.senlin.keystone_authtoken.project_domain_name -}}
-{{- set .Values.conf.senlin.keystone_authtoken "project_domain_name" .Values.endpoints.identity.auth.user.project_domain_name | quote | trunc 0 -}}
+{{- set .Values.conf.senlin.keystone_authtoken "project_domain_name" .Values.endpoints.identity.auth.senlin.project_domain_name | quote | trunc 0 -}}
 {{- end -}}
 {{- if empty .Values.conf.senlin.keystone_authtoken.user_domain_name -}}
-{{- set .Values.conf.senlin.keystone_authtoken "user_domain_name" .Values.endpoints.identity.auth.user.user_domain_name | quote | trunc 0 -}}
+{{- set .Values.conf.senlin.keystone_authtoken "user_domain_name" .Values.endpoints.identity.auth.senlin.user_domain_name | quote | trunc 0 -}}
 {{- end -}}
 {{- if empty .Values.conf.senlin.keystone_authtoken.username -}}
-{{- set .Values.conf.senlin.keystone_authtoken "username" .Values.endpoints.identity.auth.user.username | quote | trunc 0 -}}
+{{- set .Values.conf.senlin.keystone_authtoken "username" .Values.endpoints.identity.auth.senlin.username | quote | trunc 0 -}}
 {{- end -}}
 {{- if empty .Values.conf.senlin.keystone_authtoken.password -}}
-{{- set .Values.conf.senlin.keystone_authtoken "password" .Values.endpoints.identity.auth.user.password | quote | trunc 0 -}}
+{{- set .Values.conf.senlin.keystone_authtoken "password" .Values.endpoints.identity.auth.senlin.password | quote | trunc 0 -}}
 {{- end -}}
 
 {{- if empty .Values.conf.senlin.keystone_authtoken.memcached_servers -}}
 {{- tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set .Values.conf.senlin.keystone_authtoken "memcached_servers" | quote | trunc 0 -}}
 {{- end -}}
+{{- if empty .Values.conf.senlin.keystone_authtoken.memcache_secret_key -}}
+{{- set .Values.conf.senlin.keystone_authtoken "memcache_secret_key" ( default ( randAlphaNum 64 ) .Values.endpoints.oslo_cache.auth.memcache_secret_key ) | quote | trunc 0 -}}
+{{- end -}}
 
 {{- if empty .Values.conf.senlin.database.connection -}}
-{{- tuple "oslo_db" "internal" "user" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup"| set .Values.conf.senlin.database "connection" | quote | trunc 0 -}}
+{{- tuple "oslo_db" "internal" "senlin" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup"| set .Values.conf.senlin.database "connection" | quote | trunc 0 -}}
 {{- end -}}
 
 {{- if empty .Values.conf.senlin.DEFAULT.transport_url -}}
-{{- tuple "oslo_messaging" "internal" "user" "amqp" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" | set .Values.conf.senlin.DEFAULT "transport_url" | quote | trunc 0 -}}
+{{- tuple "oslo_messaging" "internal" "senlin" "amqp" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" | set .Values.conf.senlin.DEFAULT "transport_url" | quote | trunc 0 -}}
+{{- end -}}
+
+{{- if empty .Values.conf.senlin.senlin_api.bind_port -}}
+{{- tuple "clustering" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" | set .Values.conf.senlin.senlin_api "bind_port" | quote | trunc 0 -}}
 {{- end -}}
 
 ---
@@ -68,10 +70,10 @@ kind: ConfigMap
 metadata:
   name: senlin-etc
 data:
-  senlin.conf: |+
+  senlin.conf: |
 {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.senlin | indent 4 }}
-  api-paste.ini: |+
+  api-paste.ini: |
 {{ include "helm-toolkit.utils.to_ini" .Values.conf.paste | indent 4 }}
-  policy.json: |+
+  policy.json: |
 {{  toJson .Values.conf.policy | indent 4 }}
 {{- end }}

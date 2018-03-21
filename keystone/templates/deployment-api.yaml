@@ -16,9 +16,13 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_api }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.api }}
+{{- $dependencies := .Values.dependencies.static.api }}
+
 {{- $mounts_keystone_api := .Values.pod.mounts.keystone_api.keystone_api }}
 {{- $mounts_keystone_api_init := .Values.pod.mounts.keystone_api.init_container }}
+
+{{- $serviceAccountName := "keystone-api" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
@@ -35,10 +39,11 @@ spec:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       affinity:
 {{ tuple $envAll "keystone" "api" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
-        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
+        {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.api.timeout | default "30" }}
       initContainers:
 {{ tuple $envAll $dependencies $mounts_keystone_api_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
@@ -57,13 +62,17 @@ spec:
                   - /tmp/keystone-api.sh
                   - stop
           ports:
-            - name: api-public
-              containerPort: {{ .Values.network.api.port }}
-            - name: api-admin
-              containerPort: {{ .Values.network.admin.port }}
+            - name: ks-pub
+              containerPort: {{ tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+            - name: ks-adm
+              containerPort: {{ tuple "identity" "internal" "admin" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           readinessProbe:
-            tcpSocket:
-              port: {{ .Values.network.api.port }}
+            httpGet:
+              scheme: HTTP
+              path: /
+              port: {{ tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
           volumeMounts:
           - name: etckeystone
             mountPath: /etc/keystone
@@ -97,6 +106,12 @@ spec:
             mountPath: /tmp/keystone-api.sh
             subPath: keystone-api.sh
             readOnly: true
+{{- if .Values.endpoints.ldap.auth.client.tls.ca }}
+          - name: keystone-ldap-tls
+            mountPath: /etc/keystone/ldap/tls.ca
+            subPath: tls.ca
+            readOnly: true
+{{- end }}
 {{- if eq .Values.conf.keystone.token.provider "fernet" }}
           - name: keystone-fernet-keys
             mountPath: {{ .Values.conf.keystone.fernet_tokens.key_repository }}
@@ -117,6 +132,11 @@ spec:
         configMap:
           name: keystone-bin
           defaultMode: 0555
+{{- if .Values.endpoints.ldap.auth.client.tls.ca }}
+      - name: keystone-ldap-tls
+        secret:
+          secretName: keystone-ldap-tls
+{{- end }}
 {{- if eq .Values.conf.keystone.token.provider "fernet" }}
       - name: keystone-fernet-keys
         secret:

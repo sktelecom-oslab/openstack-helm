@@ -14,26 +14,32 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if .Values.manifests.daemonset_compute }}
-{{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.compute }}
+{{- define "nova.compute.daemonset" }}
+{{- $daemonset := index . 0 }}
+{{- $configMapName := index . 1 }}
+{{- $serviceAccountName := index . 2 }}
+{{- $dependencies := index . 3 }}
+{{- $envAll := index . 4 }}
+{{- with $envAll }}
+
 {{- $mounts_nova_compute := .Values.pod.mounts.nova_compute.nova_compute }}
 {{- $mounts_nova_compute_init := .Values.pod.mounts.nova_compute.init_container }}
+
 ---
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
   name: nova-compute
 spec:
-{{ tuple $envAll "compute" | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
+{{ tuple $envAll $daemonset | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
   template:
     metadata:
       labels:
-{{ tuple $envAll "nova" "compute" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+{{ tuple $envAll .Chart.Name $daemonset | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
       annotations:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       nodeSelector:
         {{ .Values.labels.agent.compute.node_selector_key }}: {{ .Values.labels.agent.compute.node_selector_value }}
       hostNetwork: true
@@ -42,7 +48,7 @@ spec:
       initContainers:
 {{ tuple $envAll $dependencies $mounts_nova_compute_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         - name: nova-compute-init
-          image: {{ .Values.images.tags.compute }}
+          image: {{ .Values.images.tags.nova_compute }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
           securityContext:
             runAsUser: 0
@@ -60,7 +66,7 @@ spec:
               mountPath: /var/lib/nova
         {{- if .Values.ceph.enabled }}
         - name: ceph-keyring-placement
-          image: {{ .Values.images.tags.compute }}
+          image: {{ .Values.images.tags.nova_compute }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
           securityContext:
             runAsUser: {{ .Values.pod.user.nova.uid }}
@@ -86,24 +92,43 @@ spec:
               subPath: key
               readOnly: true
         {{ end }}
+        {{- if eq .Values.console.console_kind "novnc"}}
         - name: nova-compute-vnc-init
-          image: {{ .Values.images.tags.compute }}
+          image: {{ .Values.images.tags.nova_compute }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
 {{ tuple $envAll $envAll.Values.pod.resources.compute | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
             runAsUser: {{ .Values.pod.user.nova.uid }}
           command:
-            - /tmp/nova-vnc-compute-init.sh
+            - /tmp/nova-console-compute-init.sh
           volumeMounts:
             - name: nova-bin
-              mountPath: /tmp/nova-vnc-compute-init.sh
-              subPath: nova-vnc-compute-init.sh
+              mountPath: /tmp/nova-console-compute-init.sh
+              subPath: nova-console-compute-init.sh
               readOnly: true
             - name: pod-shared
               mountPath: /tmp/pod-shared
+        {{ end }}
+        {{- if eq .Values.console.console_kind "spice"}}
+        - name: nova-compute-spice-init
+          image: {{ .Values.images.tags.nova_compute }}
+          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll $envAll.Values.pod.resources.compute | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+          securityContext:
+            runAsUser: {{ .Values.pod.user.nova.uid }}
+          command:
+            - /tmp/nova-console-compute-init.sh
+          volumeMounts:
+            - name: nova-bin
+              mountPath: /tmp/nova-console-compute-init.sh
+              subPath: nova-console-compute-init.sh
+              readOnly: true
+            - name: pod-shared
+              mountPath: /tmp/pod-shared
+        {{ end }}
       containers:
         - name: nova-compute
-          image: {{ .Values.images.tags.compute }}
+          image: {{ .Values.images.tags.nova_compute }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
 {{ tuple $envAll $envAll.Values.pod.resources.compute | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
@@ -196,7 +221,7 @@ spec:
               readOnly: true
 {{ if $mounts_nova_compute.volumeMounts }}{{ toYaml $mounts_nova_compute.volumeMounts | indent 12 }}{{ end }}
         - name: nova-compute-ssh
-          image: {{ .Values.images.tags.compute_ssh }}
+          image: {{ .Values.images.tags.nova_compute_ssh }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
 {{ tuple $envAll $envAll.Values.pod.resources.ssh | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
@@ -235,7 +260,7 @@ spec:
             defaultMode: 0555
         - name: nova-etc
           configMap:
-            name: nova-etc
+            name: {{ $configMapName }}
             defaultMode: 0444
         {{- if .Values.ceph.enabled }}
         - name: etcceph
@@ -269,4 +294,20 @@ spec:
           hostPath:
             path: /etc/machine-id
 {{ if $mounts_nova_compute.volumes }}{{ toYaml $mounts_nova_compute.volumes | indent 8 }}{{ end }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.manifests.daemonset_compute }}
+{{- $envAll := . }}
+{{- $daemonset := "compute" }}
+{{- $configMapName := "nova-etc" }}
+{{- $serviceAccountName := "nova-compute" }}
+
+{{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "compute" -}}
+{{- $dependencies := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
+
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- $daemonset_yaml := list $daemonset $configMapName $serviceAccountName $dependencies . | include "nova.compute.daemonset" | toString | fromYaml }}
+{{- $configmap_yaml := "nova.configmap.etc" }}
+{{- list $daemonset $daemonset_yaml $configmap_yaml $configMapName . | include "helm-toolkit.utils.daemonset_overrides" }}
 {{- end }}

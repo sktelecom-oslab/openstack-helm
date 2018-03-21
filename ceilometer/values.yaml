@@ -36,6 +36,9 @@ labels:
   job:
     node_selector_key: openstack-control-plane
     node_selector_value: enabled
+  test:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 
 images:
   tags:
@@ -43,9 +46,10 @@ images:
     db_init_mongodb: docker.io/mongo:3.4.9-jessie
     db_init: docker.io/kolla/ubuntu-source-ceilometer-api:3.0.3
     ceilometer_db_sync: docker.io/kolla/ubuntu-source-ceilometer-api:3.0.3
-    ks_user: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_service: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_endpoints: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
+    rabbit_init: docker.io/rabbitmq:3.7-management
+    ks_user: docker.io/openstackhelm/heat:newton
+    ks_service: docker.io/openstackhelm/heat:newton
+    ks_endpoints: docker.io/openstackhelm/heat:newton
     ceilometer_api: quay.io/larryrensing/ubuntu-source-ceilometer-api:3.0.3
     ceilometer_central: quay.io/larryrensing/ubuntu-source-ceilometer-central:3.0.3
     ceilometer_collector: quay.io/larryrensing/ubuntu-source-ceilometer-collector:3.0.3
@@ -58,6 +62,9 @@ network:
   api:
     ingress:
       public: true
+      annotations:
+        kubernetes.io/ingress.class: "nginx"
+        nginx.ingress.kubernetes.io/rewrite-target: /
     port: 8777
     node_port:
       enabled: false
@@ -1481,129 +1488,144 @@ conf:
     override: null
 
 dependencies:
-  db_init:
-    services:
-    - service: oslo_db
-      endpoint: internal
-  db_init_mongodb:
-    services:
-    - service: mongodb
-      endpoint: internal
-  db_sync:
-    jobs:
-    - ceilometer-db-init
-    services:
-    - service: oslo_db
-      endpoint: internal
-  ks_user:
-    services:
-    - service: identity
-      endpoint: internal
-  ks_service:
-    services:
-    - service: identity
-      endpoint: internal
-  ks_endpoints:
-    jobs:
-    - ceilometer-ks-service
-    services:
-    - service: identity
-      endpoint: internal
-  api:
-    jobs:
-    - ceilometer-db-init-mongodb
-    - ceilometer-db-sync
-    - ceilometer-ks-user
-    - ceilometer-ks-endpoints
-    services:
-    - service: identity
-      endpoint: internal
-    - service: oslo_db
-      endpoint: internal
-    - service: mongodb
-      endpoint: internal
-    - service: metric
-      endpoint: internal
-  compute:
-    jobs:
-    - ceilometer-db-init-mongodb
-    - ceilometer-db-sync
-    - ceilometer-ks-user
-    - ceilometer-ks-endpoints
-    services:
-    - service: identity
-      endpoint: internal
-    - service: oslo_db
-      endpoint: internal
-    - service: mongodb
-      endpoint: internal
-    - service: metric
-      endpoint: internal
-  collector:
-    jobs:
-    - ceilometer-db-init-mongodb
-    - ceilometer-db-sync
-    - ceilometer-ks-user
-    - ceilometer-ks-endpoints
-    services:
-    - service: identity
-      endpoint: internal
-    - service: oslo_db
-      endpoint: internal
-    - service: mongodb
-      endpoint: internal
-    - service: metric
-      endpoint: internal
-  central:
-    jobs:
-    - ceilometer-db-init-mongodb
-    - ceilometer-db-sync
-    - ceilometer-ks-user
-    - ceilometer-ks-endpoints
-    services:
-    - service: identity
-      endpoint: internal
-    - service: oslo_db
-      endpoint: internal
-    - service: mongodb
-      endpoint: internal
-    - service: metric
-      endpoint: internal
-  notification:
-    jobs:
-    - ceilometer-db-init-mongodb
-    - ceilometer-db-sync
-    - ceilometer-ks-user
-    - ceilometer-ks-endpoints
-    services:
-    - service: identity
-      endpoint: internal
-    - service: oslo_db
-      endpoint: internal
-    - service: mongodb
-      endpoint: internal
-    - service: metric
-      endpoint: internal
-  tests:
-    services:
-    - service: identity
-      endpoint: internal
-    - service: metering
-      endpoint: internal
-    - service: metric
-      endpoint: internal
+  static:
+    api:
+      jobs:
+        - ceilometer-db-init-mongodb
+        - ceilometer-db-sync
+        - ceilometer-ks-user
+        - ceilometer-ks-endpoints
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: mongodb
+        - endpoint: internal
+          service: metric
+    central:
+      jobs:
+        - ceilometer-db-init-mongodb
+        - ceilometer-db-sync
+        - ceilometer-ks-user
+        - ceilometer-ks-endpoints
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: mongodb
+        - endpoint: internal
+          service: metric
+    collector:
+      jobs:
+        - ceilometer-db-init-mongodb
+        - ceilometer-db-sync
+        - ceilometer-ks-user
+        - ceilometer-ks-endpoints
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: mongodb
+        - endpoint: internal
+          service: metric
+    compute:
+      jobs:
+        - ceilometer-db-init-mongodb
+        - ceilometer-db-sync
+        - ceilometer-ks-user
+        - ceilometer-ks-endpoints
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: mongodb
+        - endpoint: internal
+          service: metric
+    db_init:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_init_mongodb:
+      services:
+        - endpoint: internal
+          service: mongodb
+    db_sync:
+      jobs:
+        - ceilometer-db-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+    ks_endpoints:
+      jobs:
+        - ceilometer-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+    ks_service:
+      services:
+        - endpoint: internal
+          service: identity
+    ks_user:
+      services:
+        - endpoint: internal
+          service: identity
+    rabbit_init:
+      services:
+      - service: oslo_messaging
+        endpoint: internal
+    notification:
+      jobs:
+        - ceilometer-db-init-mongodb
+        - ceilometer-db-sync
+        - ceilometer-ks-user
+        - ceilometer-ks-endpoints
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: mongodb
+        - endpoint: internal
+          service: metric
+    tests:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: metering
+        - endpoint: internal
+          service: metric
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
   identity:
     admin: ceilometer-keystone-admin
-    user: ceilometer-keystone-user
+    ceilometer: ceilometer-keystone-user
+    test: ceilometer-keystone-test
   oslo_db:
     admin: ceilometer-db-admin
-    user: ceilometer-db-user
+    ceilometer: ceilometer-db-user
   mongodb:
     admin: ceilometer-mongodb-admin
-    user: ceilometer-mongodb-user
+    ceilometer: ceilometer-mongodb-user
+  oslo_messaging:
+    admin: ceilometer-rabbitmq-admin
+    ceilometer: ceilometer-rabbitmq-user
+
+bootstrap:
+  enabled: false
+  ks_user: ceilometer
+  script: |
+    openstack token issue
 
 # typically overriden by environmental
 # values, but should include all endpoints
@@ -1620,12 +1642,20 @@ endpoints:
         project_name: admin
         user_domain_name: default
         project_domain_name: default
-      user:
+      ceilometer:
         role: admin
         region_name: RegionOne
         username: ceilometer
         password: password
         project_name: service
+        user_domain_name: default
+        project_domain_name: default
+      test:
+        role: admin
+        region_name: RegionOne
+        username: test
+        password: password
+        project_name: test
         user_domain_name: default
         project_domain_name: default
     hosts:
@@ -1687,27 +1717,12 @@ endpoints:
       api:
         default: 8042
         public: 80
-  event:
-    name: panko
-    hosts:
-      default: panko-api
-      public: panko
-    host_fqdn_override:
-      default: null
-    path:
-      default: null
-    scheme:
-      default: 'http'
-    port:
-      api:
-        default: 8777
-        public: 80
   oslo_db:
     auth:
       admin:
         username: root
         password: password
-      user:
+      ceilometer:
         username: ceilometer
         password: password
     hosts:
@@ -1724,7 +1739,7 @@ endpoints:
       admin:
         username: root
         password: password
-      user:
+      ceilometer:
         username: ceilometer
         password: password
     hosts:
@@ -1737,6 +1752,13 @@ endpoints:
       mongodb:
         default: 27017
   oslo_cache:
+    auth:
+      # NOTE(portdirect): this is used to define the value for keystone
+      # authtoken cache encryption key, if not set it will be populated
+      # automatically with a random value, but to take advantage of
+      # this feature all services should be set to use the same key,
+      # and memcache service.
+      memcache_secret_key: null
     hosts:
       default: memcache
     host_fqdn_override:
@@ -1747,10 +1769,10 @@ endpoints:
   oslo_messaging:
     auth:
       admin:
-        username: admin
-        password: password
-      user:
         username: rabbitmq
+        password: password
+      ceilometer:
+        username: ceilometer
         password: password
     hosts:
       default: rabbitmq
@@ -1761,6 +1783,8 @@ endpoints:
     port:
       amqp:
         default: 5672
+      http:
+        default: 15672
 
 pod:
   affinity:
@@ -1867,6 +1891,13 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      rabbit_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
       ks_endpoints:
         requests:
           memory: "124Mi"
@@ -1905,16 +1936,20 @@ manifests:
   deployment_compute: true
   deployment_notification: true
   ingress_api: true
+  job_bootstrap: true
+  job_db_drop: false
   job_db_init: true
   job_db_init_mongodb: true
   job_db_sync: true
   job_ks_endpoints: true
   job_ks_service: true
   job_ks_user: true
+  job_rabbit_init: true
   pdb_api: true
   pod_rally_test: true
   secret_db: true
   secret_keystone: true
   secret_mongodb: true
+  secret_rabbitmq: true
   service_api: true
   service_ingress_api: true

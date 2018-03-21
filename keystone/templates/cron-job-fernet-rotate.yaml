@@ -15,17 +15,52 @@ limitations under the License.
 */}}
 
 {{- if .Values.manifests.cron_fernet_rotate }}
-{{- if and (eq .Values.conf.keystone.token.provider "fernet") (.Capabilities.APIVersions.Has "batch/v2alpha1") }}
+{{- if eq .Values.conf.keystone.token.provider "fernet" }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.fernet_rotate }}
+{{- $dependencies := .Values.dependencies.static.fernet_rotate }}
+
 {{- $mounts_keystone_fernet_rotate := .Values.pod.mounts.keystone_fernet_rotate.keystone_fernet_rotate }}
 {{- $mounts_keystone_fernet_rotate_init := .Values.pod.mounts.keystone_fernet_rotate.init_container }}
-apiVersion: batch/v2alpha1
+
+{{- $serviceAccountName := "keystone-fernet-rotate" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: Role
+metadata:
+  name: {{ $serviceAccountName }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - create
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: RoleBinding
+metadata:
+  name: {{ $serviceAccountName }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $serviceAccountName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $serviceAccountName }}
+    namespace: {{ $envAll.Release.Namespace }}
+---
+apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
   name: keystone-fernet-rotate
 spec:
   schedule: {{ .Values.jobs.fernet_rotate.cron | quote }}
+  successfulJobsHistoryLimit: {{ .Values.jobs.fernet_rotate.history.success }}
+  failedJobsHistoryLimit: {{ .Values.jobs.fernet_rotate.history.failed }}
   concurrencyPolicy: Forbid
   jobTemplate:
     metadata:
@@ -34,11 +69,12 @@ spec:
     spec:
       template:
         spec:
+          serviceAccountName: {{ $serviceAccountName }}
           initContainers:
 {{ tuple $envAll $dependencies $mounts_keystone_fernet_rotate_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 12 }}
           restartPolicy: OnFailure
           nodeSelector:
-            {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
+            {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
           containers:
             - name: keystone-fernet-rotate
               image: {{ .Values.images.tags.keystone_fernet_rotate }}

@@ -16,7 +16,10 @@ limitations under the License.
 
 {{- if .Values.manifests.job_db_init_mongodb }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.db_init_mongodb }}
+{{- $dependencies := .Values.dependencies.static.db_init_mongodb }}
+
+{{- $serviceAccountName := "ceilometer-db-init-mongodb" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -25,15 +28,16 @@ metadata:
 spec:
   template:
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       restartPolicy: OnFailure
       nodeSelector:
         {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies "[]" | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: ceilometer-db-init-mongodb
-          image: {{ .Values.images.tags.db_init_mongodb | quote }}
-          imagePullPolicy: {{ .Values.images.pull_policy | quote }}
+          image: {{ .Values.images.tags.db_init_mongodb }}
+          imagePullPolicy: {{ .Values.images.pull_policy }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.db_init_mongodb | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           env:
             - name: ROOT_DB_CONNECTION
@@ -44,7 +48,7 @@ spec:
             - name: USER_DB_CONNECTION
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.mongodb.user }}
+                  name: {{ .Values.secrets.mongodb.ceilometer }}
                   key: DB_CONNECTION
           command:
             - /tmp/db-init-mongodb.sh

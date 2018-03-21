@@ -16,9 +16,12 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_executor }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.executor }}
+{{- $dependencies := .Values.dependencies.static.executor }}
 {{- $mounts_mistral_executor := .Values.pod.mounts.mistral_executor.mistral_executor }}
 {{- $mounts_mistral_executor_init := .Values.pod.mounts.mistral_executor.init_container }}
+
+{{- $serviceAccountName := "mistral-executor" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
@@ -35,15 +38,16 @@ spec:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       affinity:
 {{ tuple $envAll "mistral" "executor" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
-        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
+        {{ .Values.labels.executor.node_selector_key }}: {{ .Values.labels.executor.node_selector_value }}
       initContainers:
 {{ tuple $envAll $dependencies $mounts_mistral_executor_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: mistral-executor
-          image: {{ .Values.images.tags.executor }}
+          image: {{ .Values.images.tags.mistral_executor }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
 {{ tuple $envAll $envAll.Values.pod.resources.executor | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:

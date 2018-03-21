@@ -24,19 +24,27 @@ metadata:
   name: keystone-bin
 data:
 {{- if .Values.bootstrap.enabled }}
-  bootstrap.sh: |+
+  bootstrap.sh: |
 {{ tuple "bin/_bootstrap.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
 {{- end }}
   rally-test.sh: |
 {{ tuple $rallyTests | include "helm-toolkit.scripts.rally_test" | indent 4 }}
+  ks-user.sh: |
+{{- include "helm-toolkit.scripts.keystone_user" . | indent 4 }}
   db-init.py: |
 {{- include "helm-toolkit.scripts.db_init" . | indent 4 }}
   db-sync.sh: |
 {{ tuple "bin/_db-sync.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  db-drop.py: |+
+  db-drop.py: |
 {{- include "helm-toolkit.scripts.db_drop" . | indent 4 }}
   keystone-api.sh: |
 {{ tuple "bin/_keystone-api.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   fernet-manage.py: |
 {{ tuple "bin/_fernet-manage.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  domain-manage-init.sh: |
+{{ tuple "bin/_domain-manage-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  domain-manage.sh: |
+{{ tuple "bin/_domain-manage.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  rabbit-init.sh: |
+{{- include "helm-toolkit.scripts.rabbit_init" . | indent 4 }}
 {{- end }}

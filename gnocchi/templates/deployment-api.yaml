@@ -16,9 +16,13 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_api }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.api }}
+{{- $dependencies := .Values.dependencies.static.api }}
+
 {{- $mounts_gnocchi_api := .Values.pod.mounts.gnocchi_api.gnocchi_api }}
 {{- $mounts_gnocchi_api_init := .Values.pod.mounts.gnocchi_api.init_container }}
+
+{{- $serviceAccountName := "gnocchi-api" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
@@ -35,15 +39,16 @@ spec:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       affinity:
 {{ tuple $envAll "gnocchi" "api" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
-        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
+        {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.api.timeout | default "30" }}
       initContainers:
 {{ tuple $envAll $dependencies $mounts_gnocchi_api_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         - name: ceph-keyring-placement
-          image: {{ .Values.images.tags.api }}
+          image: {{ .Values.images.tags.gnocchi_api }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
           command:
             - /tmp/ceph-keyring.sh
@@ -60,7 +65,7 @@ spec:
               readOnly: true
       containers:
         - name: gnocchi-api
-          image: {{ .Values.images.tags.api }}
+          image: {{ .Values.images.tags.gnocchi_api }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
 {{ tuple $envAll $envAll.Values.pod.resources.api | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
@@ -74,10 +79,10 @@ spec:
                   - stop
           ports:
             - name: gn-api
-              containerPort: {{ .Values.conf.gnocchi.api.port }}
+              containerPort: {{ tuple "metric" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           readinessProbe:
             tcpSocket:
-              port: {{ .Values.conf.gnocchi.api.port }}
+              port: {{ tuple "metric" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           volumeMounts:
             - name: pod-etc-gnocchi
               mountPath: /etc/gnocchi

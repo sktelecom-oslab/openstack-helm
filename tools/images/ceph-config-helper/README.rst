@@ -1,5 +1,5 @@
 Ceph Config Helper Container
-=====================
+============================
 
 This container builds a small image with kubectl and some other utilites for
 use in the ceph-config chart.
@@ -11,7 +11,7 @@ OS Specific Host setup:
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 Ubuntu:
-^^^^^^^aa
+^^^^^^^
 
 From a freshly provisioned Ubuntu 16.04 LTS host run:
 

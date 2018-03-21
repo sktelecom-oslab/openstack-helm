@@ -76,7 +76,7 @@ The default FQDN's for OpenStack-Helm are
 
 We want to change the ***public*** configurations to match our DNS layouts above. In each Chart
 ``values.yaml`` is a ``endpoints`` configuration that has ``host_fqdn_override``'s for each API
-that the Chart either produces or is dependant on. `Read more about how Endpoints are developed
+that the Chart either produces or is dependent on. `Read more about how Endpoints are developed
 <https://docs.openstack.org/openstack-helm/latest/devref/endpoints.html>`__.
 Note while Glance Registry is listening on a Ingress http endpoint, you will not need to expose
 the registry for external services.
@@ -135,7 +135,7 @@ repeat code.
   export FQDN=os.foo.org
 
   helm install --name=horizon ./horizon --namespace=openstack \
-    --set network.enable_node_port=true \
+    --set network.node_port.enabled=true \
     --set endpoints.dashboard.host_fqdn_override.public=horizon.$FQDN \
     --set endpoints.identity.host_fqdn_override.public=keystone.$FQDN
 
@@ -153,7 +153,7 @@ Examples
 Code examples below.
 
 If doing an `AIO install
-<https://docs.openstack.org/openstack-helm/latest/install/developer/all-in-one.html>`__,
+<https://docs.openstack.org/openstack-helm/latest/install/developer/index.html>`__,
 all the ``--set`` flags
 
 .. code-block:: shell
@@ -184,7 +184,7 @@ all the ``--set`` flags
     --set endpoints.identity.host_fqdn_override.public=keystone.$FQDN
 
   helm install --name=horizon local/horizon --namespace=openstack \
-    --set=network.enable_node_port=true \
+    --set=network.node_port.enabled=true \
     --set endpoints.dashboard.host_fqdn_override.public=horizon.$FQDN \
     --set endpoints.identity.host_fqdn_override.public=keystone.$FQDN
 

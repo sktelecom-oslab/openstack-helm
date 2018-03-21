@@ -9,6 +9,8 @@ Sometimes things go wrong. These guides will help you solve many common issues w
 
    database
    persistent-storage
+   proxy
+   ubuntu-hwe-kernel
 
 Getting help
 ============

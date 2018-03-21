@@ -27,7 +27,8 @@ labels:
 
 images:
   tags:
-    libvirt: docker.io/kolla/ubuntu-source-nova-libvirt:3.0.3
+    libvirt: docker.io/openstackhelm/libvirt:ubuntu-xenial-1.3.1
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
   pull_policy: "IfNotPresent"
 
 ceph:
@@ -39,19 +40,24 @@ ceph:
 
 conf:
   libvirt:
-    listen_addr: 0.0.0.0
-    log_level: 3
+    listen_tcp: "1"
+    listen_tls: "0"
+    auth_tcp: "none"
+    ca_file: ""
+    listen_addr: 127.0.0.1
+    log_level: "3"
   qemu:
+    stdio_handler: "file"
     user: "nova"
     group: "kvm"
 
 pod:
   affinity:
-      anti:
-        type:
-          default: preferredDuringSchedulingIgnoredDuringExecution
-        topologyKey:
-          default: kubernetes.io/hostname
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
   mounts:
     libvirt:
       init_container: null
@@ -73,6 +79,10 @@ pod:
       limits:
         memory: "1024Mi"
         cpu: "2000m"
+
+dependencies:
+  static:
+    libvirt: null
 
 manifests:
   configmap_bin: true

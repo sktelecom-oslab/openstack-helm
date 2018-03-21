@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-Listen 0.0.0.0:{{ .Values.network.api.port }}
-Listen 0.0.0.0:{{ .Values.network.admin.port }}
+Listen 0.0.0.0:{{ tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+Listen 0.0.0.0:{{ tuple "identity" "internal" "admin" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
 
 LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
 LogFormat "%{X-Forwarded-For}i %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" proxy
@@ -24,8 +24,8 @@ SetEnvIf X-Forwarded-For "^.*\..*\..*\..*" forwarded
 CustomLog /dev/stdout combined env=!forwarded
 CustomLog /dev/stdout proxy env=forwarded
 
-<VirtualHost *:{{ .Values.network.api.port }}>
-    WSGIDaemonProcess keystone-public processes=1 threads=4 user=keystone group=keystone display-name=%{GROUP}
+<VirtualHost *:{{ tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}>
+    WSGIDaemonProcess keystone-public processes=1 threads=1 user=keystone group=keystone display-name=%{GROUP}
     WSGIProcessGroup keystone-public
     WSGIScriptAlias / /var/www/cgi-bin/keystone/keystone-wsgi-public
     WSGIApplicationGroup %{GLOBAL}
@@ -40,8 +40,8 @@ CustomLog /dev/stdout proxy env=forwarded
     CustomLog /dev/stdout proxy env=forwarded
 </VirtualHost>
 
-<VirtualHost *:{{ .Values.network.admin.port }}>
-    WSGIDaemonProcess keystone-admin processes=1 threads=4 user=keystone group=keystone display-name=%{GROUP}
+<VirtualHost *:{{ tuple "identity" "internal" "admin" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}>
+    WSGIDaemonProcess keystone-admin processes=1 threads=1 user=keystone group=keystone display-name=%{GROUP}
     WSGIProcessGroup keystone-admin
     WSGIScriptAlias / /var/www/cgi-bin/keystone/keystone-wsgi-admin
     WSGIApplicationGroup %{GLOBAL}

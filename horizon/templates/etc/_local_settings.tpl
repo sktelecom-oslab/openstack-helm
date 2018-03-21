@@ -148,8 +148,8 @@ DATABASES = {
         # Database configuration here
         'ENGINE': 'django.db.backends.mysql',
         'NAME': '{{ .Values.endpoints.oslo_db.path | base }}',
-        'USER': '{{ .Values.endpoints.oslo_db.auth.user.username }}',
-        'PASSWORD': '{{ .Values.endpoints.oslo_db.auth.user.password }}',
+        'USER': '{{ .Values.endpoints.oslo_db.auth.horizon.username }}',
+        'PASSWORD': '{{ .Values.endpoints.oslo_db.auth.horizon.password }}',
         'HOST': '{{ tuple "oslo_db" "internal" . | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" }}',
         'default-character-set': 'utf8',
         'PORT': '{{ tuple "oslo_db" "internal" "mysql" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}'
@@ -177,21 +177,33 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 OPENSTACK_KEYSTONE_URL = "{{ tuple "identity" "public" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" }}"
 OPENSTACK_KEYSTONE_DEFAULT_ROLE = "_member_"
 
+
+{{- if .Values.local_settings.auth.sso.enabled }}
 # Enables keystone web single-sign-on if set to True.
-#WEBSSO_ENABLED = False
+WEBSSO_ENABLED = True
 
 # Determines which authentication choice to show as default.
-#WEBSSO_INITIAL_CHOICE = "credentials"
+WEBSSO_INITIAL_CHOICE = "{{ .Values.local_settings.auth.sso.initial_choice }}"
 
 # The list of authentication mechanisms
 # which include keystone federation protocols.
 # Current supported protocol IDs are 'saml2' and 'oidc'
 # which represent SAML 2.0, OpenID Connect respectively.
 # Do not remove the mandatory credentials mechanism.
-#WEBSSO_CHOICES = (
-#    ("credentials", _("Keystone Credentials")),
-#    ("oidc", _("OpenID Connect")),
-#    ("saml2", _("Security Assertion Markup Language")))
+WEBSSO_CHOICES = (
+    ("credentials", _("Keystone Credentials")),
+  {{- range $i, $sso := .Values.local_settings.auth.idp_mapping }}
+    ({{ $sso.name | quote }}, {{ $sso.label | quote }}),
+  {{- end }}
+)
+
+WEBSSO_IDP_MAPPING = {
+  {{- range $i, $sso := .Values.local_settings.auth.idp_mapping }}
+    {{ $sso.name | quote}}: ({{ $sso.idp | quote }}, {{ $sso.protocol | quote }}),
+  {{- end }}
+}
+
+{{- end }}
 
 # Disable SSL certificate checks (useful for self-signed certificates):
 #OPENSTACK_SSL_NO_VERIFY = True
@@ -244,7 +256,7 @@ OPENSTACK_HYPERVISOR_FEATURES = {
 # The OPENSTACK_CINDER_FEATURES settings can be used to enable optional
 # services provided by cinder that is not exposed by its extension API.
 OPENSTACK_CINDER_FEATURES = {
-    'enable_backup': False,
+    'enable_backup': {{ .Values.local_settings.openstack_cinder_features.enable_backup }},
 }
 
 # The OPENSTACK_NEUTRON_NETWORK settings can be used to enable optional

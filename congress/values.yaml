@@ -1,22 +1,52 @@
+# Copyright 2017 The Openstack-Helm Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default values for congress.
+
 labels:
-  node_selector_key: openstack-control-plane
-  node_selector_value: enabled
+  api:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  datasource:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  policy_engine:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  test:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 
 release_group: null
 
 images:
   tags:
-    congress_api: docker.io/kolla/ubuntu-source-congress-api:3.0.3
-    congress_datasource: docker.io/kolla/ubuntu-source-congress-datasource:3.0.3
-    congress_policy_engine: docker.io/kolla/ubuntu-source-congress-policy-engine:3.0.3
-    db_init: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    congress_db_sync: docker.io/kolla/ubuntu-source-congress-api:3.0.3
-    db_drop: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_user: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_service: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_endpoints: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    congress_ds_create: docker.io/kolla/ubuntu-source-congress-api:3.0.3
-    congress_scripted_test: docker.io/kolla/ubuntu-source-congress-api:3.0.3
+    congress_api: docker.io/openstackhelm/congress:newton
+    congress_datasource: docker.io/openstackhelm/congress:newton
+    congress_policy_engine: docker.io/openstackhelm/congress:newton
+    db_init: docker.io/openstackhelm/heat:newton
+    congress_db_sync: docker.io/openstackhelm/congress:newton
+    db_drop: docker.io/openstackhelm/heat:newton
+    rabbit_init: docker.io/rabbitmq:3.7-management
+    ks_user: docker.io/openstackhelm/heat:newton
+    ks_service: docker.io/openstackhelm/heat:newton
+    ks_endpoints: docker.io/openstackhelm/heat:newton
+    congress_ds_create: docker.io/openstackhelm/congress:newton
+    congress_scripted_test: docker.io/openstackhelm/congress:newton
     dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
   pull_policy: "IfNotPresent"
 
@@ -24,7 +54,9 @@ network:
   api:
     ingress:
       public: true
-      proxy_body_size: 1024M
+      annotations:
+        kubernetes.io/ingress.class: "nginx"
+        nginx.ingress.kubernetes.io/rewrite-target: /
     node_port:
       enabled: false
       port: 1789
@@ -34,99 +66,113 @@ volume:
   size: 2Gi
 
 dependencies:
-  storage_init:
-    services:
-  db_init:
-    services:
-    - service: oslo_db
-      endpoint: internal
-  db_sync:
-    jobs:
-    - congress-db-init
-    services:
-    - service: oslo_db
-      endpoint: internal
-  db_drop:
-    services:
-    - service: oslo_db
-      endpoint: internal
-  bootstrap:
-    jobs:
-    - congress-db-sync
-    - congress-ks-user
-    - congress-ks-endpoints
-    services:
-    - service: identity
-      endpoint: internal
-    - service: image
-      endpoint: internal
-  ks_user:
-    services:
-    - service: identity
-      endpoint: internal
-  ks_service:
-    services:
-    - service: identity
-      endpoint: internal
-  ks_endpoints:
-    jobs:
-    - congress-ks-service
-    services:
-    - service: identity
-      endpoint: internal
-  api:
-    jobs:
-    - congress-db-sync
-    - congress-ks-user
-    - congress-ks-endpoints
-    services:
-    - service: oslo_db
-      endpoint: internal
-    - service: identity
-      endpoint: internal
-  datasource:
-    jobs:
-    - congress-db-sync
-    - congress-ks-user
-    - congress-ks-endpoints
-    services:
-    - service: oslo_db
-      endpoint: internal
-    - service: identity
-      endpoint: internal
-  policy_engine:
-    jobs:
-    - congress-db-sync
-    - congress-ks-user
-    - congress-ks-endpoints
-    services:
-    - service: oslo_db
-      endpoint: internal
-    - service: identity
-      endpoint: internal
-  ds_create:
-    jobs:
-    - congress-ks-endpoints
-    services:
-    - service: policy
-      endpoint: internal
-  tests:
-    services:
-    - service: oslo_db
-      endpoint: internal
-    - service: identity
-      endpoint: internal
-    - service: policy
-      endpoint: internal
+  static:
+    api:
+      jobs:
+        - congress-db-sync
+        - congress-ks-user
+        - congress-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+    bootstrap:
+      jobs:
+        - congress-db-sync
+        - congress-ks-user
+        - congress-ks-endpoints
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: image
+    datasource:
+      jobs:
+        - congress-db-sync
+        - congress-ks-user
+        - congress-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+    db_drop:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_init:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_sync:
+      jobs:
+        - congress-db-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+    ds_create:
+      jobs:
+        - congress-ks-endpoints
+      services:
+        - endpoint: internal
+          service: policy
+    ks_endpoints:
+      jobs:
+        - congress-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+    ks_service:
+      services:
+        - endpoint: internal
+          service: identity
+    ks_user:
+      services:
+        - endpoint: internal
+          service: identity
+    rabbit_init:
+      services:
+      - service: oslo_messaging
+        endpoint: internal
+    policy_engine:
+      jobs:
+        - congress-db-sync
+        - congress-ks-user
+        - congress-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+    storage_init:
+      services: null
+    tests:
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: policy
 
 secrets:
   identity:
     admin: congress-keystone-admin
-    user: congress-keystone-user
+    congress: congress-keystone-user
   oslo_db:
     admin: congress-db-admin
-    user: congress-db-user
+    congress: congress-db-user
   rbd: images-rbd-keyring
+  oslo_messaging:
+    admin: congress-rabbitmq-admin
+    congress: congress-rabbitmq-user
+
+bootstrap:
+  enabled: false
+  ks_user: congress
+  script: |
+    openstack token issue
 
 endpoints:
   cluster_domain_suffix: cluster.local
@@ -140,7 +186,7 @@ endpoints:
         project_name: admin
         user_domain_name: default
         project_domain_name: default
-      user:
+      congress:
         role: admin
         region_name: RegionOne
         username: congress
@@ -182,7 +228,7 @@ endpoints:
       admin:
         username: root
         password: password
-      user:
+      congress:
         username: congress
         password: password
     hosts:
@@ -195,6 +241,13 @@ endpoints:
       mysql:
         default: 3306
   oslo_cache:
+    auth:
+      # NOTE(portdirect): this is used to define the value for keystone
+      # authtoken cache encryption key, if not set it will be populated
+      # automatically with a random value, but to take advantage of
+      # this feature all services should be set to use the same key,
+      # and memcache service.
+      memcache_secret_key: null
     hosts:
       default: memcached
     host_fqdn_override:
@@ -205,10 +258,10 @@ endpoints:
   oslo_messaging:
     auth:
       admin:
-        username: admin
-        password: password
-      user:
         username: rabbitmq
+        password: password
+      congress:
+        username: congress
         password: password
     hosts:
       default: rabbitmq
@@ -219,25 +272,8 @@ endpoints:
     port:
       amqp:
         default: 5672
-  ceph_object_store:
-    name: radosgw
-    namespace: ceph
-    auth:
-      user:
-        username: congress
-        password: password
-        tmpurlkey: supersecret
-    hosts:
-      default: ceph-rgw
-    host_fqdn_override:
-      default: null
-    path:
-      default: /auth/v1.0
-    scheme:
-      default: http
-    port:
-      api:
-        default: 8088
+      http:
+        default: 15672
 
 policy:
   datasource_services:
@@ -252,7 +288,9 @@ policy:
 conf:
   congress:
     DEFAULT:
-      bind_port: 1789
+      #NOTE(portdirect): the bind port should not be defined, and is manipulated
+      # via the endpoints section.
+      bind_port: null
       drivers: congress.datasources.neutronv2_driver.NeutronV2Driver,congress.datasources.glancev2_driver.GlanceV2Driver,congress.datasources.nova_driver.NovaDriver,congress.datasources.keystonev3_driver.KeystoneV3Driver,congress.datasources.cinder_driver.CinderDriver,congress.datasources.swift_driver.SwiftDriver,congress.datasources.plexxi_driver.PlexxiDriver,congress.datasources.vCenter_driver.VCenterDriver,congress.datasources.murano_driver.MuranoDriver,congress.datasources.ironic_driver.IronicDriver,congress.datasources.heatv1_driver.HeatV1Driver,congress.datasources.doctor_driver.DoctorDriver,congress.datasources.ceilometer_driver.CeilometerDriver
       replicated_policy_engine: False
       datasource_sync_period: 30
@@ -306,13 +344,13 @@ conf:
 pod:
   user:
     congress:
-      uid: 1000
+      uid: 42424
   affinity:
-      anti:
-        type:
-          default: preferredDuringSchedulingIgnoredDuringExecution
-        topologyKey:
-          default: kubernetes.io/hostname
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
   replicas:
     api: 1
     policy_engine: 1
@@ -387,6 +425,13 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      rabbit_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
       ks_user:
         requests:
           memory: "128Mi"
@@ -427,16 +472,20 @@ manifests:
   configmap_bin: true
   configmap_etc: true
   deployment_api: true
-  deployment_policy_engine: true
   deployment_datasource: true
+  deployment_policy_engine: true
+  ingress_api: true
+  job_bootstrap: true
+  job_db_drop: false
   job_db_init: true
   job_db_sync: true
-  secret_db: true
-  secret_keystone: true
+  job_ds_create: true
+  job_rabbit_init: true
   job_ks_endpoints: true
   job_ks_service: true
   job_ks_user: true
-  job_ds_create: true
+  secret_db: true
+  secret_keystone: true
   service_api: true
-  ingress_api: true
   service_ingress_api: true
+  secret_rabbitmq: true

@@ -16,7 +16,10 @@ limitations under the License.
 
 {{- if .Values.manifests.job_db_init_indexer }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.db_init_postgresql }}
+{{- $dependencies := .Values.dependencies.static.db_init_postgresql }}
+
+{{- $serviceAccountName := "gnocchi-db-init-indexer" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -28,21 +31,22 @@ spec:
       labels:
 {{ tuple $envAll "gnocchi" "db-init-indexer" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       restartPolicy: OnFailure
       nodeSelector:
-        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
+        {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies "[]" | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: gnocchi-db-init-indexer
-          image: {{ .Values.images.tags.db_init_indexer | quote }}
-          imagePullPolicy: {{ .Values.images.pull_policy | quote }}
+          image: {{ .Values.images.tags.db_init_indexer }}
+          imagePullPolicy: {{ .Values.images.pull_policy }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.db_init_indexer | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           env:
             - name: ROOT_DB_CONNECTION
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.oslo_db.admin }}
+                  name: {{ .Values.secrets.oslo_db_indexer.admin }}
                   key: DB_CONNECTION_INDEXER
             - name: OPENSTACK_CONFIG_FILE
               value: /etc/gnocchi/gnocchi.conf
@@ -56,6 +60,8 @@ spec:
             - name: gnocchi-etc
               mountPath: /etc/gnocchi/gnocchi.conf
               subPath: gnocchi.conf
+            - name: pod-etc-gnocchi
+              mountPath: /etc/gnocchi
             - name: gnocchi-bin
               mountPath: /tmp/db-init.sh
               subPath: db-init.sh
@@ -65,6 +71,8 @@ spec:
           configMap:
             name: gnocchi-etc
             defaultMode: 0444
+        - name: pod-etc-gnocchi
+          emptyDir: {}
         - name: gnocchi-bin
           configMap:
             name: gnocchi-bin

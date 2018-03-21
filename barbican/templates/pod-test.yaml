@@ -14,10 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
+{{- if .Values.manifests.pod_test }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.tests }}
+{{- $dependencies := .Values.dependencies.static.tests }}
+
 {{- $mounts_barbican_tests := .Values.pod.mounts.barbican_tests.barbican_tests }}
 {{- $mounts_barbican_tests_init := .Values.pod.mounts.barbican_tests.init_container }}
+
+{{- $serviceAccountName := print .Release.Name "-test" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: v1
 kind: Pod
@@ -26,6 +31,9 @@ metadata:
   annotations:
     "helm.sh/hook": test-success
 spec:
+  serviceAccountName: {{ $serviceAccountName }}
+  nodeSelector:
+    {{ .Values.labels.test.node_selector_key }}: {{ .Values.labels.test.node_selector_value }}
   restartPolicy: Never
   initContainers:
 {{ tuple $envAll $dependencies $mounts_barbican_tests_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
@@ -50,3 +58,4 @@ spec:
         name: barbican-bin
         defaultMode: 0555
 {{ if $mounts_barbican_tests.volumes }}{{ toYaml $mounts_barbican_tests.volumes | indent 4 }}{{ end }}
+{{- end }}

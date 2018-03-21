@@ -18,28 +18,36 @@
 # name: value
 
 labels:
-  node_selector_key: openstack-control-plane
-  node_selector_value: enabled
+  api:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 
 release_group: null
 
 images:
   tags:
-    bootstrap: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
+    bootstrap: docker.io/openstackhelm/heat:newton
     test: docker.io/kolla/ubuntu-source-rally:4.0.0
-    db_init: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    keystone_db_sync: docker.io/kolla/ubuntu-source-keystone:3.0.3
-    db_drop: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    keystone_fernet_setup: docker.io/kolla/ubuntu-source-keystone:3.0.3
-    keystone_fernet_rotate: docker.io/kolla/ubuntu-source-keystone:3.0.3
-    keystone_credential_setup: docker.io/kolla/ubuntu-source-keystone:3.0.3
-    keystone_credential_rotate: docker.io/kolla/ubuntu-source-keystone:3.0.3
-    keystone_api: docker.io/kolla/ubuntu-source-keystone:3.0.3
+    db_init: docker.io/openstackhelm/heat:newton
+    keystone_db_sync: docker.io/openstackhelm/keystone:newton
+    db_drop: docker.io/openstackhelm/heat:newton
+    ks_user: docker.io/openstackhelm/heat:newton
+    rabbit_init: docker.io/rabbitmq:3.7-management
+    keystone_fernet_setup: docker.io/openstackhelm/keystone:newton
+    keystone_fernet_rotate: docker.io/openstackhelm/keystone:newton
+    keystone_credential_setup: docker.io/openstackhelm/keystone:newton
+    keystone_credential_rotate: docker.io/openstackhelm/keystone:newton
+    keystone_api: docker.io/openstackhelm/keystone:newton
+    keystone_domain_manage: docker.io/openstackhelm/keystone:newton
     dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
   pull_policy: "IfNotPresent"
 
 bootstrap:
   enabled: true
+  ks_user: admin
   script: |
     openstack role add \
           --user="${OS_USERNAME}" \
@@ -50,72 +58,82 @@ bootstrap:
 
 network:
   api:
-    port: 80
     ingress:
       public: true
+      annotations:
+        kubernetes.io/ingress.class: "nginx"
+        nginx.ingress.kubernetes.io/rewrite-target: /
     external_policy_local: false
     node_port:
       enabled: false
       port: 30500
   admin:
-    port: 35357
     node_port:
       enabled: false
       port: 30357
 
 dependencies:
-  api:
-    jobs:
-    - keystone-db-sync
-    - keystone-credential-setup
-    # Comment line below when not running fernet tokens.
-    - keystone-fernet-setup
-    services:
-    - service: oslo_cache
-      endpoint: internal
-    - service: oslo_db
-      endpoint: internal
-  db_init:
-    services:
-    - service: oslo_db
-      endpoint: internal
-  db_sync:
-    jobs:
-    - keystone-db-init
-    - keystone-credential-setup
-    # Comment line below when not running fernet tokens.
-    - keystone-fernet-setup
-    services:
-    - service: oslo_db
-      endpoint: internal
-  db_drop:
-    services:
-    - service: oslo_db
-      endpoint: internal
-  fernet_setup:
-  fernet_rotate:
-    jobs:
-    - keystone-fernet-setup
-  credential_setup:
-  credential_rotate:
-    jobs:
-    - keystone-credential-setup
-  tests:
-    services:
-    - service: identity
-      endpoint: internal
-  bootstrap:
-    services:
-    - service: identity
-      endpoint: internal
+  static:
+    api:
+      jobs:
+        - keystone-db-sync
+        - keystone-credential-setup
+        - keystone-fernet-setup
+      services:
+        - endpoint: internal
+          service: oslo_cache
+        - endpoint: internal
+          service: oslo_db
+    bootstrap:
+      jobs:
+        - keystone-domain-manage
+      services:
+        - endpoint: internal
+          service: identity
+    credential_rotate:
+      jobs:
+        - keystone-credential-setup
+    credential_setup: null
+    db_drop:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_init:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_sync:
+      jobs:
+        - keystone-db-init
+        - keystone-credential-setup
+        - keystone-fernet-setup
+      services:
+        - endpoint: internal
+          service: oslo_db
+    rabbit_init:
+      services:
+      - service: oslo_messaging
+        endpoint: internal
+    domain_manage:
+      services:
+        - endpoint: internal
+          service: identity
+    fernet_rotate:
+      jobs:
+        - keystone-fernet-setup
+    fernet_setup: null
+    tests:
+      services:
+        - endpoint: internal
+          service: identity
 
 pod:
   affinity:
-      anti:
-        type:
-          default: preferredDuringSchedulingIgnoredDuringExecution
-        topologyKey:
-          default: kubernetes.io/hostname
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
   mounts:
     keystone_db_init:
       init_container: null
@@ -144,6 +162,9 @@ pod:
     keystone_credential_rotate:
       init_container: null
       keystone_credential_rotate:
+    keystone_domain_manage:
+      init_container: null
+      keystone_domain_manage:
   replicas:
     api: 1
   lifecycle:
@@ -177,6 +198,13 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      domain_manage:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
       db_init:
         requests:
           memory: "128Mi"
@@ -192,6 +220,13 @@ pod:
           memory: "1024Mi"
           cpu: "2000m"
       db_drop:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      rabbit_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
@@ -243,6 +278,9 @@ jobs:
     cron: "0 0 * * 0"
     user: keystone
     group: keystone
+    history:
+      success: 3
+      failed: 1
   credential_setup:
     user: keystone
     group: keystone
@@ -252,6 +290,9 @@ jobs:
     migrate_wait: 120
     user: keystone
     group: keystone
+    history:
+      success: 3
+      failed: 1
 
 conf:
   keystone:
@@ -259,6 +300,9 @@ conf:
       max_token_size: 255
     token:
       provider: fernet
+    identity:
+      domain_specific_drivers_enabled: True
+      domain_config_dir: /etc/keystonedomains
     fernet_tokens:
       key_repository: /etc/keystone/fernet-keys/
     credential:
@@ -268,6 +312,12 @@ conf:
     cache:
       enabled: true
       backend: dogpile.cache.memcached
+  # NOTE(lamt) We can leverage multiple domains with different
+  # configurations as outlined in
+  # https://docs.openstack.org/keystone/pike/admin/identity-domain-specific-config.html.
+  # A sample of the value override can be found in sample file:
+  # tools/overrides/example/keystone_domain_config.yaml
+  # ks_domains:
   paste:
     filter:debug:
       use: egg:oslo.middleware#debug
@@ -495,8 +545,187 @@ conf:
     identity:get_domain_config_default: rule:admin_required
   rally_tests:
     run_tempest: false
-    override:
-    append:
+    tests:
+      KeystoneBasic.add_and_remove_user_role:
+      - runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.authenticate_user_and_validate_token:
+      - args: {}
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_add_and_list_user_roles:
+      - runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_and_delete_ec2credential:
+      - runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_and_delete_role:
+      - runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_and_delete_service:
+      - args:
+          description: test_description
+          service_type: Rally_test_type
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_and_get_role:
+      - args: {}
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_and_list_ec2credentials:
+      - runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_and_list_services:
+      - args:
+          description: test_description
+          service_type: Rally_test_type
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_and_list_tenants:
+      - args: {}
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_and_list_users:
+      - args: {}
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_delete_user:
+      - args: {}
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_tenant:
+      - args: {}
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_tenant_with_users:
+      - args:
+          users_per_tenant: 1
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_update_and_delete_tenant:
+      - args: {}
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_user:
+      - args: {}
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_user_set_enabled_and_delete:
+      - args:
+          enabled: true
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      - args:
+          enabled: false
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.create_user_update_password:
+      - args: {}
+        runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
+      KeystoneBasic.get_entities:
+      - runner:
+          concurrency: 1
+          times: 1
+          type: constant
+        sla:
+          failure_rate:
+            max: 0
   mpm_event:
     override:
     append:
@@ -511,9 +740,15 @@ conf:
 secrets:
   identity:
     admin: keystone-keystone-admin
+    test: keystone-keystone-test
   oslo_db:
     admin: keystone-db-admin
-    user: keystone-db-user
+    keystone: keystone-db-user
+  oslo_messaging:
+    admin: keystone-rabbitmq-admin
+    keystone: keystone-rabbitmq-user
+  ldap:
+    tls: keystone-ldap-tls
 
 # typically overriden by environmental
 # values, but should include all endpoints
@@ -529,6 +764,14 @@ endpoints:
         username: admin
         password: password
         project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      test:
+        role: admin
+        region_name: RegionOne
+        username: test
+        password: password
+        project_name: test
         user_domain_name: default
         project_domain_name: default
     hosts:
@@ -551,7 +794,7 @@ endpoints:
       admin:
         username: root
         password: password
-      user:
+      keystone:
         username: keystone
         password: password
     hosts:
@@ -567,9 +810,9 @@ endpoints:
     namespace: null
     auth:
       admin:
-        username: admin
+        username: rabbitmq
         password: password
-      user:
+      keystone:
         username: keystone
         password: password
     hosts:
@@ -581,6 +824,8 @@ endpoints:
     port:
       amqp:
         default: 5672
+      http:
+        default: 15672
   oslo_cache:
     namespace: null
     hosts:
@@ -590,6 +835,19 @@ endpoints:
     port:
       memcache:
         default: 11211
+  ldap:
+    auth:
+      client:
+        tls:
+          # NOTE(lamt): Specify a CA value here will place a LDAPS certificate at
+          # /etc/certs/tls.ca.  To ensure keystone uses LDAPS, the
+          # following key will need to be overrided under section [ldap] or the
+          # correct domain-specific setting, else it will not be enabled:
+          #
+          #   use_tls: true
+          #   tls_req_cert: allow # Valid values: demand, never, allow
+          #   tls_cacertfile: /etc/certs/tls.ca # abs path to the CA cert
+          ca: null
 
 manifests:
   configmap_bin: true
@@ -603,12 +861,15 @@ manifests:
   job_db_init: true
   job_db_sync: true
   job_db_drop: false
+  job_domain_manage: true
   job_fernet_setup: true
+  job_rabbit_init: true
   pdb_api: true
   pod_rally_test: true
   secret_credential_keys: true
   secret_db: true
   secret_fernet_keys: true
   secret_keystone: true
+  secret_rabbitmq: true
   service_ingress_api: true
   service_api: true

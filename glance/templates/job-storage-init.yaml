@@ -16,7 +16,38 @@ limitations under the License.
 
 {{- if .Values.manifests.job_storage_init }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.storage_init }}
+{{- $dependencies := .Values.dependencies.static.storage_init }}
+
+{{- $serviceAccountName := "glance-storage-init" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: Role
+metadata:
+  name: {{ $serviceAccountName }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - create
+      - update
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: RoleBinding
+metadata:
+  name: {{ $serviceAccountName }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $serviceAccountName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $serviceAccountName }}
+    namespace: {{ $envAll.Release.Namespace }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -28,11 +59,12 @@ spec:
       labels:
 {{ tuple $envAll "glance" "storage-init" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       restartPolicy: OnFailure
       nodeSelector:
-        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
+        {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies "[]" | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         {{ if or (eq .Values.storage "rbd") (eq .Values.storage "radosgw") }}
         - name: ceph-keyring-placement
           image: {{ .Values.images.tags.glance_api }}
@@ -77,11 +109,11 @@ spec:
             {{ end }}
             {{- if eq .Values.storage "radosgw" }}
             - name: RADOSGW_USERNAME
-              value: {{ .Values.endpoints.ceph_object_store.auth.user.username | quote }}
+              value: {{ .Values.endpoints.ceph_object_store.auth.glance.username | quote }}
             - name: RADOSGW_PASSWORD
-              value: {{ .Values.endpoints.ceph_object_store.auth.user.password | quote }}
+              value: {{ .Values.endpoints.ceph_object_store.auth.glance.password | quote }}
             - name: RADOSGW_TMPURL_KEY
-              value: {{ .Values.endpoints.ceph_object_store.auth.user.tmpurlkey | quote }}
+              value: {{ .Values.endpoints.ceph_object_store.auth.glance.tmpurlkey | quote }}
             {{ end }}
           command:
             - /tmp/storage-init.sh

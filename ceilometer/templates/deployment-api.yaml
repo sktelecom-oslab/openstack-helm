@@ -16,9 +16,13 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_api }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.api }}
+{{- $dependencies := .Values.dependencies.static.api }}
+
 {{- $mounts_ceilometer_api := .Values.pod.mounts.ceilometer_api.ceilometer_api }}
 {{- $mounts_ceilometer_api_init := .Values.pod.mounts.ceilometer_api.init_container }}
+
+{{- $serviceAccountName := "ceilometer-api" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
@@ -35,6 +39,7 @@ spec:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       affinity:
 {{ tuple $envAll "ceilometer" "api" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
@@ -58,10 +63,10 @@ spec:
                   - stop
           ports:
             - name: ce-api
-              containerPort: {{ .Values.network.api.port }}
+              containerPort: {{ tuple "metering" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           readinessProbe:
             tcpSocket:
-              port: {{ .Values.network.api.port }}
+              port: {{ tuple "metering" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           volumeMounts:
             - name: pod-etc-ceilometer
               mountPath: /etc/ceilometer

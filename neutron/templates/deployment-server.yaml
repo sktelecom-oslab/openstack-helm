@@ -16,9 +16,15 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_server }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.server }}
+
+{{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "server" -}}
+{{- $dependencies := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
+
 {{- $mounts_neutron_server := .Values.pod.mounts.neutron_server.neutron_server }}
 {{- $mounts_neutron_server_init := .Values.pod.mounts.neutron_server.init_container }}
+
+{{- $serviceAccountName := "neutron-server" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
@@ -35,6 +41,7 @@ spec:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       affinity:
 {{ tuple $envAll "neutron" "server" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
@@ -59,10 +66,11 @@ spec:
                   - /tmp/neutron-server.sh
                   - stop
           ports:
-            - containerPort: {{ .Values.network.server.port }}
+            - name: q-api
+              containerPort: {{ tuple "network" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           readinessProbe:
             tcpSocket:
-              port: {{ .Values.network.server.port }}
+              port: {{ tuple "network" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           volumeMounts:
             - name: neutron-bin
               mountPath: /tmp/neutron-server.sh
@@ -76,6 +84,12 @@ spec:
               mountPath: /etc/neutron/plugins/ml2/ml2_conf.ini
               subPath: ml2_conf.ini
               readOnly: true
+            {{ if ( has "sriov" .Values.network.backend ) }}
+            - name: neutron-etc
+              mountPath: /etc/neutron/plugins/ml2/sriov_agent.ini
+              subPath: sriov_agent.ini
+              readOnly: true
+            {{ end }}
             - name: neutron-etc
               mountPath: /etc/neutron/api-paste.ini
               subPath: api-paste.ini

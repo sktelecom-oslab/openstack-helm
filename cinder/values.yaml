@@ -20,37 +20,59 @@
 storage: ceph
 
 labels:
-  node_selector_key: openstack-control-plane
-  node_selector_value: enabled
+  api:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  backup:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  scheduler:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  test:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  volume:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 
 release_group: null
 
 images:
   tags:
     test: docker.io/kolla/ubuntu-source-rally:4.0.0
-    db_init: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    cinder_db_sync: docker.io/kolla/ubuntu-source-cinder-api:3.0.3
-    db_drop: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_user: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_service: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_endpoints: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    cinder_api: docker.io/kolla/ubuntu-source-cinder-api:3.0.3
-    bootstrap: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    cinder_scheduler: docker.io/kolla/ubuntu-source-cinder-scheduler:3.0.3
-    cinder_volume: docker.io/kolla/ubuntu-source-cinder-volume:3.0.3
-    cinder_volume_usage_audit: docker.io/kolla/ubuntu-source-cinder-volume:3.0.3
-    cinder_backup: docker.io/kolla/ubuntu-source-cinder-backup:3.0.3
+    db_init: docker.io/openstackhelm/heat:newton
+    cinder_db_sync: docker.io/openstackhelm/cinder:newton
+    db_drop: docker.io/openstackhelm/heat:newton
+    rabbit_init: docker.io/rabbitmq:3.7-management
+    ks_user: docker.io/openstackhelm/heat:newton
+    ks_service: docker.io/openstackhelm/heat:newton
+    ks_endpoints: docker.io/openstackhelm/heat:newton
+    cinder_api: docker.io/openstackhelm/cinder:newton
+    bootstrap: docker.io/openstackhelm/heat:newton
+    cinder_scheduler: docker.io/openstackhelm/cinder:newton
+    cinder_volume: docker.io/openstackhelm/cinder:newton
+    cinder_volume_usage_audit: docker.io/openstackhelm/cinder:newton
+    cinder_storage_init: docker.io/ceph/daemon:tag-build-master-luminous-ubuntu-16.04
+    cinder_backup: docker.io/openstackhelm/cinder:newton
+    cinder_backup_storage_init: docker.io/ceph/daemon:tag-build-master-luminous-ubuntu-16.04
     dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
   pull_policy: "IfNotPresent"
 
 jobs:
   volume_usage_audit:
     cron: "*/5 * * * *"
+    history:
+      success: 3
+      failed: 1
 
 pod:
   user:
     cinder:
-      uid: 1000
+      uid: 42424
   affinity:
       anti:
         type:
@@ -133,6 +155,13 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      rabbit_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
       db_init:
         requests:
           memory: "128Mi"
@@ -148,6 +177,27 @@ pod:
           memory: "1024Mi"
           cpu: "2000m"
       db_drop:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      clean:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      backup_storage_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      storage_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
@@ -185,6 +235,7 @@ pod:
 
 bootstrap:
   enabled: true
+  ks_user: admin
   bootstrap_conf_backends: true
   volume_types:
     name:
@@ -195,6 +246,9 @@ network:
   api:
     ingress:
       public: true
+      annotations:
+        kubernetes.io/ingress.class: "nginx"
+        nginx.ingress.kubernetes.io/rewrite-target: /
     external_policy_local: false
     node_port:
       enabled: false
@@ -382,23 +436,39 @@ conf:
     override:
     append:
     monitors: []
-    cinder_keyring: null
+    admin_keyring: null
+    pools:
+      backup:
+        replication: 3
+        crush_rule: replicated_rule
+        chunk_size: 8
+      volume:
+        replication: 3
+        crush_rule: replicated_rule
+        chunk_size: 8
   cinder:
     DEFAULT:
       use_syslog: false
       use_stderr: true
       enable_v1_api: false
       volume_name_template: "%s"
-      osapi_volume_workers: 8
+      osapi_volume_workers: 1
       glance_api_version: 2
       os_region_name: RegionOne
       host: cinder-volume-worker
-      osapi_volume_listen_port: 8776
+      #NOTE(portdirect): the bind port should not be defined, and is manipulated
+      # via the endpoints section.
+      osapi_volume_listen_port: null
       enabled_backends: "rbd1"
+      # NOTE(portdirect): "cinder.backup.drivers.swift"  and
+      # "cinder.backup.drivers.posix" also supported
       backup_driver: "cinder.backup.drivers.ceph"
+      # Backup: Ceph RBD options
       backup_ceph_conf: "/etc/ceph/ceph.conf"
-      backup_ceph_user: admin
-      backup_ceph_pool: backups
+      backup_ceph_user: cinderbackup
+      backup_ceph_pool: cinder.backups
+      # Backup: Posix options
+      backup_posix_path: /var/lib/cinder/backup
     database:
       max_retries: -1
     keystone_authtoken:
@@ -409,28 +479,26 @@ conf:
       lock_path: "/var/lib/cinder/tmp"
     oslo_messaging_notifications:
       driver: messagingv2
+    coordination:
+      backend_url: file:///var/lib/cinder/coordination
   backends:
     # Those options will be written to backends.conf as-is.
     rbd1:
       volume_driver: cinder.volume.drivers.rbd.RBDDriver
       volume_backend_name: rbd1
-      rbd_pool: volumes
+      rbd_pool: cinder.volumes
       rbd_ceph_conf: "/etc/ceph/ceph.conf"
       rbd_flatten_volume_from_snapshot: false
       rbd_max_clone_depth: 5
       rbd_store_chunk_size: 4
       rados_connect_timeout: -1
-      rbd_user: "admin"
+      rbd_user: cinder
   rally_tests:
     run_tempest: false
     tests:
       CinderVolumes.create_and_delete_volume:
         - args:
             size: 1
-          context:
-            users:
-              tenants: 1
-              users_per_tenant: 1
           runner:
             concurrency: 1
             times: 1
@@ -442,10 +510,6 @@ conf:
             size:
               max: 5
               min: 1
-          context:
-            users:
-              tenants: 1
-              users_per_tenant: 1
           runner:
             concurrency: 1
             times: 1
@@ -454,106 +518,136 @@ conf:
             failure_rate:
               max: 0
 
+backup:
+  posix:
+    volume:
+      class_name: general
+      size: 10Gi
+
 dependencies:
-  db_init:
-    services:
-    - service: oslo_db
-      endpoint: internal
-  db_sync:
-    jobs:
-    - cinder-db-init
-    services:
-    - service: oslo_db
-      endpoint: internal
-  db_drop:
-    services:
-    - service: oslo_db
-      endpoint: internal
-  ks_user:
-    services:
-    - service: identity
-      endpoint: internal
-  ks_service:
-    services:
-    - service: identity
-      endpoint: internal
-  ks_endpoints:
-    jobs:
-    - cinder-ks-service
-    services:
-    - service: identity
-      endpoint: internal
-  api:
-    jobs:
-    - cinder-db-sync
-    - cinder-ks-user
-    - cinder-ks-endpoints
-    services:
-    - service: oslo_db
-      endpoint: internal
-    - service: identity
-      endpoint: internal
-  bootstrap:
-    services:
-    - service: identity
-      endpoint: internal
-    - service: volume
-      endpoint: internal
-  volume:
-    jobs:
-    - cinder-db-sync
-    - cinder-ks-user
-    - cinder-ks-endpoints
-    services:
-    - service: identity
-      endpoint: internal
-    - service: volume
-      endpoint: internal
-  volume_usage_audit:
-    jobs:
-    - cinder-db-sync
-    - cinder-ks-user
-    - cinder-ks-endpoints
-    services:
-    - service: identity
-      endpoint: internal
-    - service: volume
-      endpoint: internal
-  scheduler:
-    jobs:
-    - cinder-db-sync
-    - cinder-ks-user
-    - cinder-ks-endpoints
-    services:
-    - service: identity
-      endpoint: internal
-    - service: volume
-      endpoint: internal
-  backup:
-    jobs:
-    - cinder-db-sync
-    - cinder-ks-user
-    - cinder-ks-endpoints
-    services:
-    - service: identity
-      endpoint: internal
-    - service: volume
-      endpoint: internal
-  tests:
-    services:
-    - service: identity
-      endpoint: internal
-    - service: volume
-      endpoint: internal
+  static:
+    api:
+      jobs:
+        - cinder-db-sync
+        - cinder-ks-user
+        - cinder-ks-endpoints
+        - cinder-storage-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+    backup:
+      jobs:
+        - cinder-db-sync
+        - cinder-ks-user
+        - cinder-ks-endpoints
+        - cinder-storage-init
+        - cinder-backup-storage-init
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
+    backup_storage_init:
+      jobs: null
+    bootstrap:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
+    clean:
+      jobs: null
+    db_drop:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_init:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_sync:
+      jobs:
+        - cinder-db-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+    ks_endpoints:
+      jobs:
+        - cinder-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+    ks_service:
+      services:
+        - endpoint: internal
+          service: identity
+    ks_user:
+      services:
+        - endpoint: internal
+          service: identity
+    rabbit_init:
+      services:
+      - service: oslo_messaging
+        endpoint: internal
+    scheduler:
+      jobs:
+        - cinder-db-sync
+        - cinder-ks-user
+        - cinder-ks-endpoints
+        - cinder-storage-init
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
+    storage_init:
+      jobs: null
+    tests:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
+    volume:
+      jobs:
+        - cinder-db-sync
+        - cinder-ks-user
+        - cinder-ks-endpoints
+        - cinder-storage-init
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
+    volume_usage_audit:
+      jobs:
+        - cinder-db-sync
+        - cinder-ks-user
+        - cinder-ks-endpoints
+        - cinder-storage-init
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
   identity:
     admin: cinder-keystone-admin
-    user: cinder-keystone-user
+    cinder: cinder-keystone-user
+    test: cinder-keystone-test
   oslo_db:
     admin: cinder-db-admin
-    user: cinder-db-user
+    cinder: cinder-db-user
+  rbd:
+    backup: cinder-backup-rbd-keyring
+    volume: cinder-volume-rbd-keyring
+  oslo_messaging:
+    admin: cinder-rabbitmq-admin
+    cinder: cinder-rabbitmq-user
 
 # We use a different layout of the endpoints here to account for versioning
 # this swaps the service name and type, and should be rolled out to other
@@ -570,12 +664,20 @@ endpoints:
         project_name: admin
         user_domain_name: default
         project_domain_name: default
-      user:
+      cinder:
         role: admin
         region_name: RegionOne
         username: cinder
         password: password
         project_name: service
+        user_domain_name: default
+        project_domain_name: default
+      test:
+        role: admin
+        region_name: RegionOne
+        username: test
+        password: password
+        project_name: test
         user_domain_name: default
         project_domain_name: default
     hosts:
@@ -672,7 +774,7 @@ endpoints:
       admin:
         username: root
         password: password
-      user:
+      cinder:
         username: cinder
         password: password
     hosts:
@@ -687,10 +789,10 @@ endpoints:
   oslo_messaging:
     auth:
       admin:
-        username: admin
-        password: password
-      user:
         username: rabbitmq
+        password: password
+      cinder:
+        username: cinder
         password: password
     hosts:
       default: rabbitmq
@@ -701,7 +803,16 @@ endpoints:
     port:
       amqp:
         default: 5672
+      http:
+        default: 15672
   oslo_cache:
+    auth:
+      # NOTE(portdirect): this is used to define the value for keystone
+      # authtoken cache encryption key, if not set it will be populated
+      # automatically with a random value, but to take advantage of
+      # this feature all services should be set to use the same key,
+      # and memcache service.
+      memcache_secret_key: null
     hosts:
       default: memcached
     host_fqdn_override:
@@ -719,16 +830,22 @@ manifests:
   deployment_scheduler: true
   deployment_volume: true
   ingress_api: true
+  job_backup_storage_init: true
   job_bootstrap: true
+  job_clean: true
   job_db_init: true
+  job_rabbit_init: true
   job_db_sync: true
   job_db_drop: false
   job_ks_endpoints: true
   job_ks_service: true
   job_ks_user: true
+  job_storage_init: true
   pdb_api: true
   pod_rally_test: true
+  pvc_backup: true
   secret_db: true
   secret_keystone: true
+  secret_rabbitmq: true
   service_api: true
   service_ingress_api: true

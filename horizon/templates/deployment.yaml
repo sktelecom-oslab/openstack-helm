@@ -16,9 +16,13 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.dashboard }}
+{{- $dependencies := .Values.dependencies.static.dashboard }}
+
 {{- $mounts_horizon := .Values.pod.mounts.horizon.horizon }}
 {{- $mounts_horizon_init := .Values.pod.mounts.horizon.init_container }}
+
+{{- $serviceAccountName := "horizon" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
@@ -35,10 +39,11 @@ spec:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       affinity:
 {{ tuple $envAll "horizon" "server" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
-        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
+        {{ .Values.labels.dashboard.node_selector_key }}: {{ .Values.labels.dashboard.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.horizon.timeout | default "30" }}
       initContainers:
 {{ tuple $envAll $dependencies $mounts_horizon_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
@@ -59,10 +64,15 @@ spec:
                   - /tmp/horizon.sh
                   - stop
           ports:
-            - containerPort: {{ .Values.network.port }}
+            - name: web
+              containerPort: {{ tuple "dashboard" "internal" "web" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           readinessProbe:
-            tcpSocket:
-              port: {{ .Values.network.port }}
+            httpGet:
+              scheme: HTTP
+              path: /
+              port: {{ tuple "dashboard" "internal" "web" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
           volumeMounts:
             - name: static-horizon
               mountPath: /var/www/html/

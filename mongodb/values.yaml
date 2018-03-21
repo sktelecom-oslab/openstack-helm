@@ -40,6 +40,7 @@ pod:
 images:
   tags:
     mongodb: docker.io/mongo:3.4.9-jessie
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
   pull_policy: IfNotPresent
 
 storage:
@@ -52,8 +53,9 @@ storage:
     host_path: /var/lib/openstack-helm/mongodb
 
 labels:
-  node_selector_key: openstack-control-plane
-  node_selector_value: enabled
+  server:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 
 endpoints:
   cluster_domain_suffix: cluster.local
@@ -71,6 +73,11 @@ endpoints:
     port:
       mongodb:
         default: 27017
+
+dependencies:
+  static:
+    mongodb:
+      jobs: null
 
 manifests:
   configmap_bin: true

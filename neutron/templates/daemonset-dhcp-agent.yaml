@@ -16,9 +16,15 @@ limitations under the License.
 
 {{- if .Values.manifests.daemonset_dhcp_agent }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.dhcp }}
+
+{{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "dhcp" -}}
+{{- $dependencies := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
+
 {{- $mounts_neutron_dhcp_agent := .Values.pod.mounts.neutron_dhcp_agent.neutron_dhcp_agent }}
 {{- $mounts_neutron_dhcp_agent_init := .Values.pod.mounts.neutron_dhcp_agent.init_container }}
+
+{{- $serviceAccountName := "neutron-dhcp-agent" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: extensions/v1beta1
 kind: DaemonSet
@@ -34,6 +40,7 @@ spec:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       nodeSelector:
         {{ .Values.labels.agent.dhcp.node_selector_key }}: {{ .Values.labels.agent.dhcp.node_selector_value }}
       dnsPolicy: ClusterFirstWithHostNet
@@ -63,7 +70,7 @@ spec:
               mountPath: /etc/neutron/plugins/ml2/ml2_conf.ini
               subPath: ml2_conf.ini
               readOnly: true
-            {{- if eq .Values.network.backend "ovs" }}
+            {{- if ( has "openvswitch" .Values.network.backend ) }}
             - name: neutron-etc
               mountPath: /etc/neutron/plugins/ml2/openvswitch_agent.ini
               subPath: openvswitch_agent.ini
@@ -78,6 +85,10 @@ spec:
             - name: neutron-etc
               mountPath: /etc/neutron/dnsmasq.conf
               subPath: dnsmasq.conf
+              readOnly: true
+            - name: neutron-etc
+              mountPath: /etc/neutron/metadata_agent.ini
+              subPath: metadata_agent.ini
               readOnly: true
             - name: neutron-etc
               # NOTE (Portdirect): We mount here to override Kollas
@@ -142,7 +153,7 @@ spec:
           configMap:
             name: neutron-etc
             defaultMode: 0444
-        {{- if eq .Values.network.backend "ovs" }}
+        {{- if ( has "openvswitch" .Values.network.backend ) }}
         - name: runopenvswitch
           hostPath:
             path: /run/openvswitch

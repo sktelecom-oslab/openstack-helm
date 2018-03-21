@@ -14,7 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
+{{- if .Values.manifests.deployment_error }}
 {{- $envAll := . }}
+{{- $dependencies := .Values.dependencies.static.error_pages }}
+
+{{- $serviceAccountName := "ingress-error-pages"}}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
@@ -28,11 +33,14 @@ spec:
       labels:
 {{ tuple $envAll "ingress" "error-pages" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       affinity:
 {{ tuple $envAll "ingress" "error-pages" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
-        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
-      terminationGracePeriodSeconds: 60
+        {{ .Values.labels.error_server.node_selector_key }}: {{ .Values.labels.error_server.node_selector_value }}
+      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.error_pages.timeout | default "60" }}
+      initContainers:
+{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: ingress-error-pages
           image: {{ .Values.images.tags.error_pages }}
@@ -47,3 +55,23 @@ spec:
             timeoutSeconds: 5
           ports:
             - containerPort: 8080
+          command:
+            - /tmp/ingress-error-pages.sh
+            - start
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /tmp/ingress-error-pages.sh
+                  - stop
+          volumeMounts:
+            - name: ingress-bin
+              mountPath: /tmp/ingress-error-pages.sh
+              subPath: ingress-error-pages.sh
+              readOnly: true
+      volumes:
+      - name: ingress-bin
+        configMap:
+          name: ingress-bin
+          defaultMode: 0555
+{{- end }}

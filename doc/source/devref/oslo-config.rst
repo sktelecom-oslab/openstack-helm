@@ -31,7 +31,7 @@ snippet for an imaginary Keystone configuration is described here:
               - log
         security_compliance:
           password_expires_ignore_user_ids:
-          # Values in a list will be converted to a comma seperated key
+          # Values in a list will be converted to a comma separated key
             - "123"
             - "456"
 
@@ -47,7 +47,7 @@ produce the following config file:
     metadata:
       name: keystone-etc
     data:
-      keystone.conf: |+
+      keystone.conf: |
         [DEFAULT]
         max_token_size = 255
         transport_url = rabbit://keystone:password@rabbitmq.default.svc.cluster.local:5672/openstack
@@ -94,6 +94,6 @@ performed via statements in the configmap template, which also calls the
     metadata:
       name: keystone-etc
     data:
-      keystone.conf: |+
+      keystone.conf: |
     {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.keystone | indent 4 }}
     {{- end }}

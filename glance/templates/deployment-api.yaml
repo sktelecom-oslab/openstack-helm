@@ -16,9 +16,13 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_api }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.api }}
+{{- $dependencies := .Values.dependencies.static.api }}
+
 {{- $mounts_glance_api := .Values.pod.mounts.glance_api.glance_api }}
 {{- $mounts_glance_api_init := .Values.pod.mounts.glance_api.init_container }}
+
+{{- $serviceAccountName := "glance-api" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
@@ -35,10 +39,11 @@ spec:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       affinity:
 {{ tuple $envAll "glance" "api" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
-        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
+        {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.api.timeout | default "600" }}
       initContainers:
 {{ tuple $envAll $dependencies $mounts_glance_api_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
@@ -96,10 +101,11 @@ spec:
                   - /tmp/glance-api.sh
                   - stop
           ports:
-            - containerPort: {{ .Values.conf.glance.DEFAULT.bind_port }}
+            - name: g-api
+              containerPort: {{ tuple "image" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           readinessProbe:
             tcpSocket:
-              port: {{ .Values.conf.glance.DEFAULT.bind_port }}
+              port: {{ tuple "image" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           volumeMounts:
             - name: etcglance
               mountPath: /etc/glance

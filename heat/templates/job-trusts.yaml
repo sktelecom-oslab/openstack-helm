@@ -15,10 +15,13 @@ limitations under the License.
 */}}
 
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.trusts }}
+{{- $dependencies := .Values.dependencies.static.trusts }}
+
 {{- $mounts_heat_trusts := .Values.pod.mounts.heat_trusts.heat_trusts }}
 {{- $mounts_heat_trusts_init := .Values.pod.mounts.heat_trusts.init_container }}
 
+{{- $serviceAccountName := "heat-trusts" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -30,9 +33,10 @@ spec:
       labels:
 {{ tuple $envAll "heat" "trusts" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       restartPolicy: OnFailure
       nodeSelector:
-        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
+        {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
       initContainers:
 {{ tuple $envAll $dependencies $mounts_heat_trusts_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
@@ -56,7 +60,9 @@ spec:
             - name: SERVICE_OS_ROLES
               value: {{ .Values.conf.heat.DEFAULT.trusts_delegated_roles }}
             - name: SERVICE_OS_TRUSTEE
-              value: {{ .Values.endpoints.identity.auth.trustee.username }}
+              value: {{ .Values.endpoints.identity.auth.heat_trustee.username }}
+            - name: SERVICE_OS_TRUSTEE_DOMAIN
+              value: {{ .Values.endpoints.identity.auth.heat_trustee.user_domain_name }}
       volumes:
         - name: heat-bin
           configMap:

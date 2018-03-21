@@ -14,7 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
+{{- if .Values.manifests.statefulset }}
 {{- $envAll := . }}
+{{- $dependencies := .Values.dependencies.static.postgresql }}
+
+{{- $serviceAccountName := "postgresql" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1beta1
 kind: StatefulSet
@@ -28,46 +33,78 @@ spec:
       labels:
 {{ tuple $envAll "postgresql" "server" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       affinity:
 {{ tuple $envAll "postgresql" "server" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
-        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
+        {{ .Values.labels.server.node_selector_key }}: {{ .Values.labels.server.node_selector_value }}
+      initContainers:
+{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
       - name: postgresql
         image: {{ .Values.images.tags.postgresql }}
         imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll $envAll.Values.pod.resources.server | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
         ports:
-        - containerPort: {{ tuple "postgresql" "internal" "postgresql" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+          - containerPort: {{ tuple "postgresql" "internal" "postgresql" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+        env:
+          - name: 'POSTGRES_PASSWORD'
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.secrets.postgresql.admin }}
+                key: 'POSTGRES_PASSWORD'
+          - name: 'POSTGRES_USER'
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.secrets.postgresql.admin }}
+                key: 'POSTGRES_USER'
+          - name: 'PGDATA'
+            value: {{ .Values.storage.mount.path | quote }}
+        command:
+          - /tmp/start.sh
         livenessProbe:
           exec:
             command:
-            - pg_isready
+              - /tmp/readiness.sh
           initialDelaySeconds: 20
           timeoutSeconds: 5
         readinessProbe:
           exec:
             command:
-            - pg_isready
+              - /tmp/readiness.sh
           initialDelaySeconds: 20
           timeoutSeconds: 5
-{{ tuple $envAll $envAll.Values.pod.resources.server | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
         volumeMounts:
-        - name: postgresql-data
-          mountPath: /var/lib/postgresql
-{{- if not .Values.storage.pvc.enabled }}
+          - name: postgresql-bin
+            mountPath: /tmp/start.sh
+            subPath: start.sh
+            readOnly: true
+          - name: postgresql-bin
+            mountPath: /tmp/readiness.sh
+            subPath: readiness.sh
+            readOnly: true
+          - name: postgresql-data
+            mountPath: {{ .Values.storage.mount.path }}
+            subPath: {{ .Values.storage.mount.subpath }}
       volumes:
-      - name: postgresql-data
-        hostPath:
-          path: {{ .Values.storage.host.host_path }}
+        - name: postgresql-bin
+          configMap:
+            name: postgresql-bin
+            defaultMode: 0555
+{{- if not .Values.storage.pvc.enabled }}
+        - name: postgresql-data
+          hostPath:
+            path: {{ .Values.storage.host.host_path }}
 {{- else }}
   volumeClaimTemplates:
-  - metadata:
-      name: postgresql-data
-      annotations:
-        {{ .Values.storage.pvc.class_path }}: {{ .Values.storage.pvc.class_name }}
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        requests:
-          storage: {{ .Values.storage.pvc.size }}
+    - metadata:
+        name: postgresql-data
+        annotations:
+          {{ .Values.storage.pvc.class_path }}: {{ .Values.storage.pvc.class_name }}
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.storage.pvc.size }}
+{{- end }}
 {{- end }}

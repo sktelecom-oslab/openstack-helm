@@ -20,24 +20,46 @@
 release_group: null
 
 labels:
-  node_selector_key: openstack-control-plane
-  node_selector_value: enabled
+  api:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  cfn:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  cloudwatch:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  engine:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 
 images:
   tags:
-    bootstrap: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    db_init: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    heat_db_sync: docker.io/kolla/ubuntu-source-heat-api:3.0.3
-    db_drop: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_user: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_service: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_endpoints: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    heat_api: docker.io/kolla/ubuntu-source-heat-api:3.0.3
-    heat_cfn: docker.io/kolla/ubuntu-source-heat-api:3.0.3
-    heat_cloudwatch: docker.io/kolla/ubuntu-source-heat-api:3.0.3
-    heat_engine: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
+    bootstrap: docker.io/openstackhelm/heat:newton
+    db_init: docker.io/openstackhelm/heat:newton
+    heat_db_sync: docker.io/openstackhelm/heat:newton
+    db_drop: docker.io/openstackhelm/heat:newton
+    rabbit_init: docker.io/rabbitmq:3.7-management
+    ks_user: docker.io/openstackhelm/heat:newton
+    ks_service: docker.io/openstackhelm/heat:newton
+    ks_endpoints: docker.io/openstackhelm/heat:newton
+    heat_api: docker.io/openstackhelm/heat:newton
+    heat_cfn: docker.io/openstackhelm/heat:newton
+    heat_cloudwatch: docker.io/openstackhelm/heat:newton
+    heat_engine: docker.io/openstackhelm/heat:newton
+    heat_engine_cleaner: docker.io/openstackhelm/heat:newton
     dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
   pull_policy: "IfNotPresent"
+
+jobs:
+  engine_cleaner:
+    cron: "*/5 * * * *"
+    history:
+      success: 3
+      failed: 1
 
 conf:
   paste:
@@ -188,8 +210,9 @@ conf:
     resource_types:OS::Cinder::QoSSpecs: rule:project_admin
   heat:
     DEFAULT:
-      num_engine_workers: 4
+      num_engine_workers: 1
       trusts_delegated_roles: ""
+      host: heat-engine
     keystone_authtoken:
       auth_type: password
       auth_version: v3
@@ -200,14 +223,20 @@ conf:
       auth_type: password
       auth_version: v3
     heat_api:
-      bind_port: 8004
-      workers: 4
+      #NOTE(portdirect): the bind port should not be defined, and is manipulated
+      # via the endpoints section.
+      bind_port: null
+      workers: 1
     heat_api_cloudwatch:
-      bind_port: 8003
-      workers: 4
+      #NOTE(portdirect): the bind port should not be defined, and is manipulated
+      # via the endpoints section.
+      bind_port: null
+      workers: 1
     heat_api_cfn:
-      bind_port: 8000
-      workers: 4
+      #NOTE(portdirect): the bind port should not be defined, and is manipulated
+      # via the endpoints section.
+      bind_port: null
+      workers: 1
     paste_deploy:
       api_paste_config: /etc/heat/api-paste.ini
     clients:
@@ -221,6 +250,9 @@ network:
   api:
     ingress:
       public: true
+      annotations:
+        kubernetes.io/ingress.class: "nginx"
+        nginx.ingress.kubernetes.io/rewrite-target: /
     external_policy_local: false
     node_port:
       enabled: false
@@ -228,107 +260,144 @@ network:
   cfn:
     ingress:
       public: true
+      annotations:
+        kubernetes.io/ingress.class: "nginx"
+        nginx.ingress.kubernetes.io/rewrite-target: /
     node_port:
       enabled: false
       port: 30800
   cloudwatch:
     ingress:
       public: true
+      annotations:
+        kubernetes.io/ingress.class: "nginx"
+        nginx.ingress.kubernetes.io/rewrite-target: /
     node_port:
       enabled: false
       port: 30003
 
 bootstrap:
   enabled: false
+  ks_user: heat
   script: |
     openstack token issue
 
 dependencies:
-  db_init:
-    services:
-    - service: oslo_db
-      endpoint: internal
-  db_sync:
-    jobs:
-    - heat-db-init
-    services:
-    - service: oslo_db
-      endpoint: internal
-  db_drop:
-    services:
-    - service: oslo_db
-      endpoint: internal
-  ks_user:
-    services:
-    - service: identity
-      endpoint: internal
-  ks_service:
-    services:
-    - service: identity
-      endpoint: internal
-  ks_endpoints:
-    jobs:
-    - heat-ks-service
-    services:
-    - service: identity
-      endpoint: internal
-  trusts:
-    jobs:
-    - heat-ks-user
-    services:
-    - service: identity
-      endpoint: internal
-  api:
-    jobs:
-    - heat-db-sync
-    - heat-ks-user
-    - heat-ks-endpoints
-    services:
-    - service: oslo_db
-      endpoint: internal
-    - service: identity
-      endpoint: internal
-  cfn:
-    jobs:
-    - heat-db-sync
-    - heat-ks-user
-    - heat-ks-endpoints
-    services:
-    - service: oslo_db
-      endpoint: internal
-    - service: identity
-      endpoint: internal
-  cloudwatch:
-    jobs:
-    - heat-db-sync
-    - heat-ks-user
-    - heat-ks-endpoints
-    services:
-    - service: oslo_db
-      endpoint: internal
-    - service: identity
-      endpoint: internal
-  engine:
-    jobs:
-    - heat-db-sync
-    - heat-ks-user
-    - heat-ks-endpoints
-    services:
-    - service: oslo_db
-      endpoint: internal
-    - service: identity
-      endpoint: internal
+  static:
+    api:
+      jobs:
+        - heat-db-sync
+        - heat-ks-user
+        - heat-trustee-ks-user
+        - heat-domain-ks-user
+        - heat-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+    cfn:
+      jobs:
+        - heat-db-sync
+        - heat-ks-user
+        - heat-trustee-ks-user
+        - heat-domain-ks-user
+        - heat-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+    cloudwatch:
+      jobs:
+        - heat-db-sync
+        - heat-ks-user
+        - heat-trustee-ks-user
+        - heat-domain-ks-user
+        - heat-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+    db_drop:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_init:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_sync:
+      jobs:
+        - heat-db-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+    engine:
+      jobs:
+        - heat-db-sync
+        - heat-ks-user
+        - heat-trustee-ks-user
+        - heat-domain-ks-user
+        - heat-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+    engine_cleaner:
+      jobs:
+        - heat-db-sync
+        - heat-ks-user
+        - heat-trustee-ks-user
+        - heat-domain-ks-user
+        - heat-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+    ks_endpoints:
+      jobs:
+        - heat-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+    ks_service:
+      services:
+        - endpoint: internal
+          service: identity
+    ks_user:
+      services:
+        - endpoint: internal
+          service: identity
+    rabbit_init:
+      services:
+      - service: oslo_messaging
+        endpoint: internal
+    trusts:
+      jobs:
+        - heat-ks-user
+        - heat-trustee-ks-user
+        - heat-domain-ks-user
+      services:
+        - endpoint: internal
+          service: identity
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
   identity:
     admin: heat-keystone-admin
-    user: heat-keystone-user
-    trustee: heat-keystone-trustee
-    stack_user: heat-keystone-stack-user
+    heat: heat-keystone-user
+    heat_trustee: heat-keystone-trustee
+    heat_stack_user: heat-keystone-stack-user
   oslo_db:
     admin: heat-db-admin
-    user: heat-db-user
+    heat: heat-db-user
+  oslo_messaging:
+    admin: heat-rabbitmq-admin
+    heat: heat-rabbitmq-user
 
 # typically overriden by environmental
 # values, but should include all endpoints
@@ -345,7 +414,7 @@ endpoints:
         project_name: admin
         user_domain_name: default
         project_domain_name: default
-      user:
+      heat:
         role: admin
         region_name: RegionOne
         username: heat
@@ -353,7 +422,7 @@ endpoints:
         project_name: service
         user_domain_name: default
         project_domain_name: default
-      trustee:
+      heat_trustee:
         role: admin
         region_name: RegionOne
         username: heat-trust
@@ -361,7 +430,7 @@ endpoints:
         project_name: service
         user_domain_name: default
         project_domain_name: default
-      stack_user:
+      heat_stack_user:
         role: admin
         region_name: RegionOne
         username: heat-domain
@@ -433,7 +502,7 @@ endpoints:
       admin:
         username: root
         password: password
-      user:
+      heat:
         username: heat
         password: password
     hosts:
@@ -446,6 +515,13 @@ endpoints:
       mysql:
         default: 3306
   oslo_cache:
+    auth:
+      # NOTE(portdirect): this is used to define the value for keystone
+      # authtoken cache encryption key, if not set it will be populated
+      # automatically with a random value, but to take advantage of
+      # this feature all services should be set to use the same key,
+      # and memcache service.
+      memcache_secret_key: null
     hosts:
       default: memcached
     host_fqdn_override:
@@ -456,10 +532,10 @@ endpoints:
   oslo_messaging:
     auth:
       admin:
-        username: admin
-        password: password
-      user:
         username: rabbitmq
+        password: password
+      heat:
+        username: heat
         password: password
     hosts:
       default: rabbitmq
@@ -470,11 +546,13 @@ endpoints:
     port:
       amqp:
         default: 5672
+      http:
+        default: 15672
 
 pod:
   user:
     heat:
-      uid: 1000
+      uid: 42424
   affinity:
       anti:
         type:
@@ -500,6 +578,9 @@ pod:
     heat_trusts:
       init_container: null
       heat_trusts:
+    heat_engine_cleaner:
+      init_container: null
+      heat_engine_cleaner:
   replicas:
     api: 1
     cfn: 1
@@ -609,6 +690,13 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      rabbit_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
       tests:
         requests:
           memory: "128Mi"
@@ -623,10 +711,18 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      engine_cleaner:
+        requests:
+          memory: "124Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 manifests:
   configmap_bin: true
   configmap_etc: true
+  cron_job_engine_cleaner: true
   deployment_api: true
   deployment_cfn: true
   deployment_cloudwatch: true
@@ -640,12 +736,16 @@ manifests:
   job_db_drop: false
   job_ks_endpoints: true
   job_ks_service: true
+  job_ks_user_domain: true
+  job_ks_user_trustee: true
   job_ks_user: true
+  job_rabbit_init: true
   pdb_api: true
   pdb_cfn: true
   pdb_cloudwatch: true
   secret_db: true
   secret_keystone: true
+  secret_rabbitmq: true
   service_api: true
   service_cfn: true
   service_cloudwatch: true

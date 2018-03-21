@@ -13,18 +13,80 @@
 # limitations under the License.
 
 - project:
-    name: openstack/openstack-helm
     check:
       jobs:
-        - openstack-helm-linter:
-            voting: true
-        - openstack-helm-legacy-ubuntu-vm-ovs-radosgw:
+        - openstack-helm-linter
+        - openstack-helm-dev-deploy-ceph-ovs:
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-dev-deploy-nfs-ovs:
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-dev-deploy-ceph-lb:
             voting: false
             irrelevant-files:
               - ^.*\.rst$
               - ^doc/.*$
               - ^releasenotes/.*$
-        - openstack-helm-legacy-ubuntu-vm-lb-radosgw:
+        - openstack-helm-dev-deploy-nfs-lb:
+            voting: false
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-dev-deploy-nfs-ldap:
+            voting: false
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-multinode-ubuntu:
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        #NOTE(portdirect): Voting disabled until ipcalc package issue resolved.
+        - openstack-helm-multinode-centos:
+            voting: false
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        #NOTE(lamt): Make fedora job non-voting until issues with gates are resolved.
+        - openstack-helm-multinode-fedora:
+            voting: false
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-ironic-ubuntu:
+            voting: false
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-armada-fullstack-deploy:
+            voting: false
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-kolla-deploy-ceph-ovs:
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-ocata-loci-deploy-ceph:
+            voting: false
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-ocata-kolla-deploy-ceph:
             voting: false
             irrelevant-files:
               - ^.*\.rst$
@@ -32,7 +94,31 @@
               - ^releasenotes/.*$
     gate:
       jobs:
-        - openstack-helm-linter
+        - openstack-helm-linter:
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-dev-deploy-ceph-ovs:
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-dev-deploy-nfs-ovs:
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-multinode-ubuntu:
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
+        - openstack-helm-kolla-deploy-ceph-ovs:
+            irrelevant-files:
+              - ^.*\.rst$
+              - ^doc/.*$
+              - ^releasenotes/.*$
 
 - job:
     name: openstack-helm-linter
@@ -40,31 +126,122 @@
     nodeset: openstack-helm-single-node
 
 - job:
+    name: openstack-helm-dev-deploy
     timeout: 7200
     vars:
-        zuul_osh_infra_relative_path: ../openstack-helm-infra/
-    name: openstack-helm-legacy
+      osh_neutron_backend: openvswitch
+      zuul_osh_infra_relative_path: ../openstack-helm-infra/
     pre-run:
+      - ../openstack-helm-infra/tools/gate/playbooks/osh-infra-upgrade-host.yaml
+    post-run: ../openstack-helm-infra/tools/gate/playbooks/osh-infra-collect-logs.yaml
+    required-projects:
+      - openstack/openstack-helm-infra
+    nodeset: openstack-helm-single-node
+
+- job:
+    name: openstack-helm-dev-deploy-ceph-ovs
+    parent: openstack-helm-dev-deploy
+    run: tools/gate/playbooks/dev-deploy-ceph.yaml
+
+- job:
+    name: openstack-helm-dev-deploy-nfs-ovs
+    parent: openstack-helm-dev-deploy
+    run: tools/gate/playbooks/dev-deploy-nfs.yaml
+
+- job:
+    name: openstack-helm-dev-deploy-ceph-lb
+    vars:
+      osh_neutron_backend: linuxbridge
+      zuul_osh_extra_helm_args_relative_path: --values=./tools/overrides/backends/networking/linuxbridge.yaml
+    parent: openstack-helm-dev-deploy
+    run: tools/gate/playbooks/dev-deploy-ceph.yaml
+
+- job:
+    name: openstack-helm-dev-deploy-nfs-lb
+    vars:
+      osh_neutron_backend: linuxbridge
+      zuul_osh_extra_helm_args_relative_path: --values=./tools/overrides/backends/networking/linuxbridge.yaml
+    parent: openstack-helm-dev-deploy
+    run: tools/gate/playbooks/dev-deploy-nfs.yaml
+
+- job:
+    name: openstack-helm-dev-deploy-nfs-ldap
+    vars:
+      idp_backend: ldap
+    parent: openstack-helm-dev-deploy
+    run: tools/gate/playbooks/dev-deploy-nfs.yaml
+
+- job:
+    name: openstack-helm-multinode
+    timeout: 7200
+    vars:
+      zuul_osh_infra_relative_path: ../openstack-helm-infra/
+    pre-run:
+      - ../openstack-helm-infra/tools/gate/playbooks/osh-infra-upgrade-host.yaml
       - ../openstack-helm-infra/tools/gate/playbooks/osh-infra-deploy-docker.yaml
       - ../openstack-helm-infra/tools/gate/playbooks/osh-infra-build.yaml
       - ../openstack-helm-infra/tools/gate/playbooks/osh-infra-deploy-k8s.yaml
-    run: tools/gate/playbooks/legacy-gate-runner.yaml
-    post-run: tools/gate/playbooks/legacy-gate-post.yaml
+    run: tools/gate/playbooks/multinode-deploy.yaml
+    post-run: ../openstack-helm-infra/tools/gate/playbooks/osh-infra-collect-logs.yaml
+    required-projects:
+      - openstack/openstack-helm-infra
+
+- job:
+    timeout: 9600
+    vars:
+        zuul_osh_infra_relative_path: ../openstack-helm-infra/
+    name: openstack-helm-armada-fullstack-deploy
+    pre-run:
+      - ../openstack-helm-infra/tools/gate/playbooks/osh-infra-upgrade-host.yaml
+      - ../openstack-helm-infra/tools/gate/playbooks/osh-infra-deploy-docker.yaml
+      - ../openstack-helm-infra/tools/gate/playbooks/osh-infra-build.yaml
+      - ../openstack-helm-infra/tools/gate/playbooks/osh-infra-deploy-k8s.yaml
+    run: tools/gate/playbooks/armada-fullstack-deploy.yaml
+    post-run:
+      - ../openstack-helm-infra/tools/gate/playbooks/osh-infra-collect-logs.yaml
+      - tools/gate/playbooks/gather-armada-manifests.yaml
     required-projects:
         - openstack/openstack-helm-infra
+    nodeset: openstack-helm-five-node-ubuntu
 
 - job:
-    name: openstack-helm-legacy-ubuntu-vm-ovs-radosgw
-    parent: openstack-helm-legacy
-    vars:
-      sdn_plugin: ovs
-      glance_backend: radosgw
-    nodeset: openstack-helm-ubuntu
+    name: openstack-helm-multinode-ubuntu
+    parent: openstack-helm-multinode
+    nodeset: openstack-helm-five-node-ubuntu
 
 - job:
-    name: openstack-helm-legacy-ubuntu-vm-lb-radosgw
-    parent: openstack-helm-legacy
-    vars:
-      sdn_plugin: linuxbridge
-      glance_backend: radosgw
+    name: openstack-helm-multinode-centos
+    parent: openstack-helm-multinode
+    nodeset: openstack-helm-five-node-centos
+
+- job:
+    name: openstack-helm-multinode-fedora
+    parent: openstack-helm-multinode
+    nodeset: openstack-helm-five-node-fedora
+
+- job:
+    name: openstack-helm-ironic-ubuntu
+    parent: openstack-helm-multinode
     nodeset: openstack-helm-ubuntu
+    run: tools/gate/playbooks/ironic-deploy.yaml
+
+- job:
+    name: openstack-helm-kolla-deploy-ceph-ovs
+    vars:
+      zuul_osh_extra_helm_args_relative_path: --values=./tools/overrides/releases/newton/kolla.yaml
+    parent: openstack-helm-dev-deploy
+    run: tools/gate/playbooks/dev-deploy-ceph.yaml
+
+- job:
+    name: openstack-helm-ocata-loci-deploy-ceph
+    vars:
+      zuul_osh_extra_helm_args_relative_path: --values=./tools/overrides/releases/ocata/loci.yaml
+    parent: openstack-helm-dev-deploy
+    run: tools/gate/playbooks/dev-deploy-ceph.yaml
+
+- job:
+    name: openstack-helm-ocata-kolla-deploy-ceph
+    vars:
+      zuul_osh_extra_helm_args_relative_path: --values=./tools/overrides/releases/ocata/kolla.yaml
+    parent: openstack-helm-dev-deploy
+    run: tools/gate/playbooks/dev-deploy-ceph.yaml

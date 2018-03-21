@@ -21,14 +21,15 @@ release_group: null
 
 images:
   tags:
-    openvswitch_db_server: docker.io/kolla/ubuntu-source-openvswitch-db-server:3.0.3
-    openvswitch_vswitchd: docker.io/kolla/ubuntu-source-openvswitch-vswitchd:3.0.3
+    openvswitch_db_server: docker.io/openstackhelm/openvswitch:v2.8.1
+    openvswitch_vswitchd: docker.io/openstackhelm/openvswitch:v2.8.1
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
   pull_policy: "IfNotPresent"
 
 labels:
   ovs:
-      node_selector_key: openvswitch
-      node_selector_value: enabled
+    node_selector_key: openvswitch
+    node_selector_value: enabled
 
 network:
   external_bridge: br-ex
@@ -78,6 +79,11 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+
+dependencies:
+  static:
+    db: null
+    vswitchd: null
 
 manifests:
   configmap_bin: true

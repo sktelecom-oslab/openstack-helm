@@ -16,9 +16,13 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_registry }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.registry }}
+{{- $dependencies := .Values.dependencies.static.registry }}
+
 {{- $mounts_glance_registry := .Values.pod.mounts.glance_registry.glance_registry }}
 {{- $mounts_glance_registry_init := .Values.pod.mounts.glance_registry.init_container }}
+
+{{- $serviceAccountName := "glance-registry" }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
@@ -35,10 +39,11 @@ spec:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
+      serviceAccountName: {{ $serviceAccountName }}
       affinity:
 {{ tuple $envAll "glance" "registry" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
-        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value }}
+        {{ .Values.labels.registry.node_selector_key }}: {{ .Values.labels.registry.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.registry.timeout | default "600" }}
       initContainers:
 {{ tuple $envAll $dependencies $mounts_glance_registry_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
@@ -59,10 +64,11 @@ spec:
                   - /tmp/glance-registry.sh
                   - stop
           ports:
-            - containerPort: {{ .Values.conf.glance_registry.DEFAULT.bind_port }}
+            - name: g-reg
+              containerPort: {{ tuple "image_registry" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           readinessProbe:
             tcpSocket:
-              port: {{ .Values.conf.glance_registry.DEFAULT.bind_port }}
+              port: {{ tuple "image_registry" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           volumeMounts:
             - name: etcglance
               mountPath: /etc/glance

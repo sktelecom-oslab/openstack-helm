@@ -13,8 +13,9 @@
 # limitations under the License.
 
 labels:
-  node_selector_key: openstack-control-plane
-  node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 
 images:
   tags:
@@ -23,9 +24,9 @@ images:
     db_init: docker.io/kolla/ubuntu-source-rally:3.0.3
     manage_db: docker.io/kolla/ubuntu-source-rally:3.0.3
     run_task: docker.io/kolla/ubuntu-source-rally:3.0.3
-    ks_user: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_service: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
-    ks_endpoints: docker.io/kolla/ubuntu-source-heat-engine:3.0.3
+    ks_user: docker.io/openstackhelm/heat:newton
+    ks_service: docker.io/openstackhelm/heat:newton
+    ks_endpoints: docker.io/openstackhelm/heat:newton
     api: docker.io/kolla/ubuntu-source-rally:3.0.3
   pull_policy: "IfNotPresent"
 
@@ -136,52 +137,52 @@ bootstrap:
     openstack token issue
 
 dependencies:
-  db_init:
-    services:
-    - service: oslo_db
-      endpoint: internal
-  ks_user:
-    services:
-    - service: identity
-      endpoint: internal
-  ks_service:
-    services:
-    - service: identity
-      endpoint: internal
-  ks_endpoints:
-    jobs:
-    - rally-ks-service
-    services:
-    - service: identity
-      endpoint: internal
-  manage_db:
-    jobs:
-    - rally-ks-user
-    - rally-ks-endpoints
-    - rally-db-init
-    services:
-    - service: oslo_db
-      endpoint: internal
-    - service: identity
-      endpoint: internal
-  run_task:
-    jobs:
-    - rally-manage-db
-    services:
-    - service: oslo_db
-      endpoint: internal
-    - service: identity
-      endpoint: internal
-
+  static:
+    db_init:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    ks_endpoints:
+      jobs:
+        - rally-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+    ks_service:
+      services:
+        - endpoint: internal
+          service: identity
+    ks_user:
+      services:
+        - endpoint: internal
+          service: identity
+    manage_db:
+      jobs:
+        - rally-ks-user
+        - rally-ks-endpoints
+        - rally-db-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+    run_task:
+      jobs:
+        - rally-manage-db
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
   identity:
     admin: rally-keystone-admin
-    user: rally-keystone-user
+    rally: rally-keystone-user
   oslo_db:
     admin: rally-db-admin
-    user: rally-db-user
+    rally: rally-db-user
 
 endpoints:
   cluster_domain_suffix: cluster.local
@@ -195,7 +196,7 @@ endpoints:
         project_name: admin
         user_domain_name: default
         project_domain_name: default
-      user:
+      rally:
         role: admin
         region_name: RegionOne
         username: rally
@@ -237,7 +238,7 @@ endpoints:
       admin:
         username: root
         password: password
-      user:
+      rally:
         username: rally
         password: password
     hosts:
@@ -250,6 +251,9 @@ endpoints:
       mysql:
         default: 3306
   oslo_cache:
+    auth:
+      keystone_authtoken:
+        secret_key: null
     hosts:
       default: memcached
     host_fqdn_override:
@@ -263,24 +267,6 @@ pvc:
   requests:
     storage: 2Gi
   storage_class: general
-
-manifests:
-  configmap_bin: true
-  configmap_etc: true
-  configmap_tasks: true
-  configmap_test_templates: true
-  ingress_api: true
-  job_bootstrap: true
-  job_db_init: true
-  job_manage_db: true
-  job_run_task: true
-  pdb_api: true
-  pvc_rally: true
-  secret_db: true
-  secret_keystone: true
-  service_ingress_api: true
-  service: true
-
 
 conf:
   paste:
@@ -12513,3 +12499,23 @@ conf:
             concurrency: 3
             times: 6
             type: constant
+
+manifests:
+  configmap_bin: true
+  configmap_etc: true
+  configmap_tasks: true
+  configmap_test_templates: true
+  ingress_api: true
+  job_bootstrap: true
+  job_db_init: true
+  job_ks_endpoints: true
+  job_ks_service: true
+  job_ks_user: true
+  job_manage_db: true
+  job_run_task: true
+  pdb_api: true
+  pvc_rally: true
+  secret_db: true
+  secret_keystone: true
+  service_ingress_api: true
+  service: true

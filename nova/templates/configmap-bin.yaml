@@ -23,26 +23,28 @@ kind: ConfigMap
 metadata:
   name: nova-bin
 data:
-  rally-test.sh: |
-{{ tuple $rallyTests | include "helm-toolkit.scripts.rally_test" | indent 4 }}
-  db-init.py: |+
-{{- include "helm-toolkit.scripts.db_init" . | indent 4 }}
-  db-sync.sh: |+
-{{ tuple "bin/_db-sync.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  db-drop.py: |+
-{{- include "helm-toolkit.scripts.db_drop" . | indent 4 }}
-  ks-service.sh: |+
-{{- include "helm-toolkit.scripts.keystone_service" . | indent 4 }}
-  ks-endpoints.sh: |+
-{{- include "helm-toolkit.scripts.keystone_endpoints" . | indent 4 }}
-  ks-user.sh: |+
-{{- include "helm-toolkit.scripts.keystone_user" . | indent 4 }}
-{{- if .Values.ceph.enabled }}
-  ceph-keyring.sh: |+
-{{ tuple "bin/_ceph-keyring.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-{{- end }}
+{{- if .Values.bootstrap.enabled }}
   bootstrap.sh: |
 {{ tuple "bin/_bootstrap.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- end }}
+  rally-test.sh: |
+{{ tuple $rallyTests | include "helm-toolkit.scripts.rally_test" | indent 4 }}
+  db-init.py: |
+{{- include "helm-toolkit.scripts.db_init" . | indent 4 }}
+  db-sync.sh: |
+{{ tuple "bin/_db-sync.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  db-drop.py: |
+{{- include "helm-toolkit.scripts.db_drop" . | indent 4 }}
+  ks-service.sh: |
+{{- include "helm-toolkit.scripts.keystone_service" . | indent 4 }}
+  ks-endpoints.sh: |
+{{- include "helm-toolkit.scripts.keystone_endpoints" . | indent 4 }}
+  ks-user.sh: |
+{{- include "helm-toolkit.scripts.keystone_user" . | indent 4 }}
+{{- if .Values.ceph.enabled }}
+  ceph-keyring.sh: |
+{{ tuple "bin/_ceph-keyring.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- end }}
   nova-api.sh: |
 {{ tuple "bin/_nova-api.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   nova-api-metadata.sh: |
@@ -55,6 +57,8 @@ data:
 {{ tuple "bin/_nova-compute.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   nova-compute-init.sh: |
 {{ tuple "bin/_nova-compute-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  nova-compute-ironic.sh: |
+{{ tuple "bin/_nova-compute-ironic.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   nova-conductor.sh: |
 {{ tuple "bin/_nova-conductor.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   nova-consoleauth.sh: |
@@ -63,16 +67,18 @@ data:
 {{ tuple "bin/_nova-scheduler.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   fake-iptables.sh: |
 {{ tuple "bin/_fake-iptables.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  nova-novncproxy.sh: |
-{{ tuple "bin/_nova-novncproxy.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  nova-vnc-compute-init.sh: |
-{{ tuple "bin/_nova-vnc-compute-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  nova-vnc-proxy-init-assets.sh: |
-{{ tuple "bin/_nova-vnc-proxy-init-assets.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  nova-vnc-proxy-init.sh: |
-{{ tuple "bin/_nova-vnc-proxy-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  nova-console-compute-init.sh: |
+{{ tuple "bin/_nova-console-compute-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  nova-console-proxy.sh: |
+{{ tuple "bin/_nova-console-proxy.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  nova-console-proxy-init.sh: |
+{{ tuple "bin/_nova-console-proxy-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  nova-console-proxy-init-assets.sh: |
+{{ tuple "bin/_nova-console-proxy-init-assets.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   ssh-start.sh: |
 {{ tuple "bin/_ssh-start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   cell-setup.sh: |
 {{ tuple "bin/_cell-setup.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  rabbit-init.sh: |
+{{- include "helm-toolkit.scripts.rabbit_init" . | indent 4 }}
 {{- end }}

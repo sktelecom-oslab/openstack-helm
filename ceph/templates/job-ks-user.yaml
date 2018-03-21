@@ -14,53 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if .Values.manifests.job_ks_user }}
-{{- $envAll := . }}
-{{- if .Values.deployment.rgw_keystone_user_and_endpoints }}
-{{- $dependencies := .Values.dependencies.ks_user }}
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: ceph-ks-user
-spec:
-  template:
-    metadata:
-      labels:
-{{ tuple $envAll "ceph" "ks-user" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
-    spec:
-      restartPolicy: OnFailure
-      nodeSelector:
-        {{ $envAll.Values.labels.jobs.node_selector_key }}: {{ $envAll.Values.labels.jobs.node_selector_value }}
-      initContainers:
-{{ tuple $envAll $dependencies "[]" | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
-      containers:
-        - name: ceph-ks-user
-          image: {{ .Values.images.tags.ks_user }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
-{{ tuple $envAll $envAll.Values.pod.resources.jobs.ks_user | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
-          command:
-            - /tmp/ks-user.sh
-          volumeMounts:
-            - name: ks-user-sh
-              mountPath: /tmp/ks-user.sh
-              subPath: ks-user.sh
-              readOnly: true
-          env:
-{{- with $env := dict "ksUserSecret" .Values.secrets.identity.admin }}
-{{- include "helm-toolkit.snippets.keystone_openrc_env_vars" $env | indent 12 }}
-{{- end }}
-            - name: SERVICE_OS_SERVICE_NAME
-              value: "ceph"
-{{- with $env := dict "ksUserSecret" .Values.secrets.identity.user }}
-{{- include "helm-toolkit.snippets.keystone_user_create_env_vars" $env | indent 12 }}
-{{- end }}
-            - name: SERVICE_OS_ROLE
-              value: {{ .Values.endpoints.identity.auth.user.role | quote }}
-      volumes:
-        - name: ks-user-sh
-          configMap:
-            name: ceph-bin-ks
-            defaultMode: 0555
-{{- end }}
+{{- if and .Values.manifests.job_ks_user .Values.deployment.rgw_keystone_user_and_endpoints }}
+{{- $ksUserJob := dict "envAll" . "configMapBin" "ceph-bin-ks" "serviceName" "ceph" "serviceUser" "swift" -}}
+{{ $ksUserJob | include "helm-toolkit.manifests.job_ks_user" }}
 {{- end }}
